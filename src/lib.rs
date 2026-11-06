@@ -5,9 +5,12 @@ pub mod board;
 pub mod fonts;
 pub mod game;
 pub mod generate;
+pub mod generating;
 pub mod gfx;
+pub mod history;
 pub mod icons;
 pub mod locale;
+pub mod record;
 pub mod solver;
 pub mod storage;
 pub mod strings;
@@ -23,6 +26,10 @@ mod lang_tests;
 mod generate_tests;
 #[cfg(test)]
 mod mode_tests;
+#[cfg(test)]
+mod record_tests;
+#[cfg(test)]
+mod generating_tests;
 
 use app::App;
 use game::Level;
@@ -90,11 +97,47 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
         *a = App::with(saved, 5);
         a.open_at(a.game.idx(15, 8));
+        a.finish_laying();
+    }),
+    // A field that takes its time: the face thinks, and after 600 ms the light sweeps. It is
+    // held for an hour, so it never lands while you look.
+    ("generating", |a| {
+        let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
+        *a = App::with(saved, 5);
+        a.lay = |mode, dims, seed, first| {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+            generate::lay(mode, dims, seed, first)
+        };
+        a.open_at(a.game.idx(15, 8));
     }),
     ("picker", |a| {
         *a = scene(Level::Beginner, 7);
         play(a, &[(4, 4)]);
         a.toggle_panel(app::Panel::Picker);
+    }),
+    ("history", |a| {
+        *a = scene(Level::Beginner, 7);
+        let rec = |minutes: u64, end, seconds, forced, survived| record::Record {
+            at: 1_793_000_000_000 + minutes * 60_000,
+            end,
+            seconds,
+            three_bv: 31,
+            three_bv_solved: if end == record::End::Won { 31 } else { 17 },
+            left: 38,
+            right: 9,
+            chords: 4,
+            forced,
+            survived,
+            ..record::Record::new(game::Mode::Classic, (9, 9, 10))
+        };
+        a.history = vec![
+            rec(0, record::End::Won, 41, 1, 1),
+            rec(9, record::End::Lost, 12, 2, 1),
+            rec(15, record::End::Won, 33, 0, 0),
+            rec(20, record::End::Abandoned, 7, 0, 0),
+            rec(31, record::End::Won, 38, 1, 1),
+        ];
+        a.toggle_panel(app::Panel::History);
     }),
     ("settings", |a| {
         *a = scene(Level::Beginner, 7);
@@ -178,6 +221,7 @@ pub fn spec() -> AppSpec<App> {
     AppSpec {
         scenes: SCENES,
         min_size: Some((300.0, 300.0)),
+        setup: Some(|s, waker| s.waker = Some(waker)),
         poll: Some(|s, t, tx| s.tick(t, tx)),
         on_key: Some(|s, e, tx| s.key(e, tx)),
         fonts: fonts::LIST,
@@ -212,6 +256,9 @@ pub fn run() {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen(start))]
 pub fn start() {
+    // In the field generator's worker, the same wasm runs no app.
     #[cfg(target_arch = "wasm32")]
-    run();
+    if web_sys::window().is_some() {
+        run();
+    }
 }

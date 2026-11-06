@@ -59,6 +59,8 @@ pub enum Mood {
     Oh,
     Dead,
     Cool,
+    /// A field is being generated: eyes up and aside, mouth pursed to one side.
+    Think,
 }
 
 /// The face's features over its plastic dome, in a `s`×`s` box.
@@ -79,6 +81,9 @@ pub fn face(s: f32, mood: Mood, ink: Color) -> El {
                     .line(p(cx + 2.4, 10.1), p(cx - 2.4, 14.9), w * 0.8, LineCap::Round, ink);
             }
         }
+        Mood::Think => {
+            shape = shape.fill(circle(13.0 * u, 10.8 * u, 2.1 * u, 16), ink).fill(circle(22.0 * u, 10.8 * u, 2.1 * u, 16), ink);
+        }
         Mood::Cool => {
             let lens = |x0: f32| vec![p(x0, 10.0), p(x0 + 8.0, 10.0), p(x0 + 7.0, 15.0), p(x0 + 4.0, 16.2), p(x0 + 1.0, 15.0)];
             shape = shape
@@ -91,6 +96,7 @@ pub fn face(s: f32, mood: Mood, ink: Color) -> El {
     }
     shape = match mood {
         Mood::Oh => shape.fill(circle(16.0 * u, 21.5 * u, 3.4 * u, 20), ink),
+        Mood::Think => shape.line(p(13.0, 21.8), p(20.0, 20.4), w, LineCap::Round, ink),
         Mood::Dead => shape.stroke_path(&Path::new().move_to(p(10.5, 23.5)).quad_to(p(16.0, 18.2), p(21.5, 23.5)), w, LineCap::Round, ink),
         _ => shape.stroke_path(&Path::new().move_to(p(9.5, 19.0)).quad_to(p(16.0, 25.5), p(22.5, 19.0)), w, LineCap::Round, ink),
     };

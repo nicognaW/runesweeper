@@ -33,7 +33,7 @@ pub fn max_guess(dims: Dims, seed: u64, first: usize) -> MaxGuess {
 /// [`max_guess`] with another budget, for measuring what more steps buy.
 pub fn searched(dims: Dims, seed: u64, first: usize, budget: u32) -> MaxGuess {
     let mut s = Search::with_budget(dims, seed, first, budget);
-    while !s.done() {
+    while !s.done() && !super::stopped() {
         s.step();
     }
     s.finish()
@@ -123,13 +123,17 @@ impl Search {
         }
     }
 
-    /// The best finished field. Call once [`Search::done`].
+    /// The best finished field, once [`Search::done`]. Stopped early with none, the current
+    /// field, unfinished (a cancelled search's, which is thrown away).
     ///
     /// The search may favour one cell of a pair (an edge cell, say) for the mine, and a player
     /// who learned that would beat the odds. So each pair's mine goes to either cell on a fair
     /// coin: no number anywhere else changes, so the walk is the same either way.
     pub fn finish(mut self) -> MaxGuess {
-        let (mut at, walk) = self.best.take().expect("the search holds a finished field");
+        let Some((mut at, walk)) = self.best.take() else {
+            let walk = self.walk();
+            return MaxGuess { game: Game::with_mines(self.w, self.h, &self.at), fifty_fifties: walk.fifty_fifties, steps: self.steps };
+        };
         let unflipped = at.clone();
         for &(a, b) in &walk.fifty_fifties {
             if self.rng.below(2) == 1 {

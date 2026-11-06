@@ -28,6 +28,9 @@ pub const AURA: u32 = 9;
 pub const SELECT: u32 = 11;
 /// data: [t0, 0, 0, 0]: a red flash that cools.
 pub const HEAT: u32 = 12;
+/// data: [t0, colour index, 0, 0]: a slow band of light across the hidden tiles while a field
+/// is generated, from off its left edge at t0; with Reduce Motion it breathes in place.
+pub const SWEEP: u32 = 13;
 
 const COLORS: [u32; 8] = [0xffc531, 0x6aa8ff, 0xff3b4e, 0x4ade80, 0xffffff, 0xd8d8d8, 0xa78bfa, 0xff2d2d];
 
@@ -91,9 +94,20 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
             }
             Fx::glow(GlowParams { style: GlowStyle::Neon, color: if d[1] > 0.5 { rgb(0xc8c8c8) } else { rgb(0xff2d2d) }, radius: 26.0, intensity: 1.3, heat, ..Default::default() })
         }
+        SWEEP => Fx::shimmer(ShimmerParams {
+            color: if d[1] > 0.5 { rgb(0xffffff) } else { rgb(0xbcd4ff) },
+            period: 2.4,
+            band: 60.0,
+            angle: 0.35,
+            intensity: 0.22,
+            pause: 0.25,
+            feather: 3.0,
+            ..Default::default()
+        }),
         _ => return None,
     };
-    Some(fx.on(shape).at(t))
+    // The sweep's clock starts with it, so its band enters from the edge.
+    Some(fx.on(shape).at(if kind == SWEEP { (t - d[0]).max(0.0) } else { t }))
 }
 
 #[derive(Default)]
@@ -115,6 +129,8 @@ impl Compositor<App> for Gfx {
         let mut at: Vec<u32> = Vec::new();
         let mut layers: Vec<FxLayer> = Vec::new();
         let mut slots: Vec<FxSlot> = Vec::new();
+        // Reduce Motion stills the sweep's band, but it still breathes, so it keeps frames coming.
+        let mut sweeping = false;
         for (n, i) in f.rt.instances.iter().enumerate() {
             if i.params[1] != KIND_EFFECT {
                 continue;
@@ -125,11 +141,12 @@ impl Compositor<App> for Gfx {
             let r = i.radii.iter().fold(0.0f32, |a, v| a.max(v.abs())) / k;
             let shape = if kind == FACE { Shape::circle(x + w / 2.0, y + h / 2.0, w.min(h) / 2.0) } else { Shape::rounded(x, y, w, h, r) };
             let Some(l) = layer(kind, i.uv, shape, [x, y], t) else { continue };
+            sweeping |= kind == SWEEP;
             at.push(n as u32);
             layers.push(l.reduced(reduced));
             slots.push(FxSlot::default().scale(k).clip(i.clip, i.fade));
         }
-        self.live = layers.iter().any(|l| l.is_animating());
+        self.live = sweeping || layers.iter().any(|l| l.is_animating());
         let fx = self.fx.get_or_insert_with(|| FxRenderer::new(device, f.format, FxOptions { dither: true }));
         fx.set_srgb_blend(f.srgb_blend());
         fx.add_format(device, wgpu::TextureFormat::Rgba16Float);

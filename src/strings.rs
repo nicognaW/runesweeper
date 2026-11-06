@@ -99,6 +99,17 @@ strings! {
     Color: "Color", "颜色";
     Language: "Language", "语言";
     FontCredit: "Chinese text: MiSans by Xiaomi", "中文字体：小米 MiSans";
+    // History.
+    History: "History", "历史记录";
+    LevelRow: "Level", "级别";
+    FastestWin: "Fastest win", "最快纪录";
+    NoGames: "No games yet", "还没有对局";
+    Won: "Won", "胜利";
+    LostGame: "Lost", "失败";
+    Abandoned: "Abandoned", "放弃";
+    Seconds: "{} s", "{} 秒";
+    Bv3Clicks: "3BV {}/{} · {} clicks", "3BV {}/{} · 点击 {} 次";
+    ForcedGuesses: "{} forced, {} survived", "必须猜 {} 次，猜对 {} 次";
 }
 
 impl S {
