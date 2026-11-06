@@ -83,6 +83,10 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         *a = scene(Level::Beginner, 7);
         a.dialog = Some(app::Dialog::BestTimes);
     }),
+    ("boot", |a| {
+        *a = scene(Level::Intermediate, 11);
+        a.power_on();
+    }),
     ("first-run", |a| {
         *a = scene(Level::Beginner, 7);
         a.saved.played = false;

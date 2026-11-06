@@ -28,6 +28,8 @@ pub const MARGIN: f32 = 22.0;
 pub const NUMBER: TextStyle = TextStyle::new(16.0, 700.0).features("'tnum' 1");
 pub const UI: TextStyle = TextStyle::new(13.0, 500.0);
 pub const UI_BOLD: TextStyle = TextStyle::new(13.0, 600.0);
+/// Instrument labels: small capitals, spaced out.
+pub const HUD: TextStyle = TextStyle::new(12.0, 600.0).tracking(1.8);
 pub const SMALL: TextStyle = TextStyle::new(11.5, 500.0);
 pub const TITLE: TextStyle = TextStyle::new(20.0, 700.0).tracking(-0.2);
 
@@ -71,42 +73,43 @@ impl Palette {
         if color { Self::neon() } else { Self::mono() }
     }
 
+    /// Sealed alien instrument: smoked-glass cells lit at the edge, cyan phosphor readouts.
     fn neon() -> Palette {
         Palette {
-            bg: c(0x07080f),
-            console_top: c(0x1b2033),
-            console_bottom: c(0x10131f),
-            well: c(0x090b14),
-            open: c(0x141a2b),
-            open_edge: ca(0xffffff, 0.035),
-            tile_top: c(0x45557c),
-            tile_bottom: c(0x2b3553),
-            tile_hover: ca(0x9fc3ff, 0.16),
-            tile_press: c(0x1a2136),
-            tile_light: ca(0xffffff, 0.28),
-            // The Windows colours (blue, green, red, navy, maroon, teal, black, grey), lit for a
-            // dark field.
+            bg: c(0x020308),
+            console_top: c(0x111a24),
+            console_bottom: c(0x070b12),
+            well: c(0x02050a),
+            open: c(0x060d16),
+            open_edge: ca(0x3df5e0, 0.07),
+            tile_top: c(0x14283a),
+            tile_bottom: c(0x08101b),
+            tile_hover: ca(0x3df5e0, 0.14),
+            tile_press: c(0x0a121c),
+            tile_light: ca(0x9ff8ee, 0.5),
+            // The Windows colours in hue order (blue, green, red, navy, maroon, teal, black,
+            // grey), as luminous inks on a near-black field.
             numbers: [
                 c(0x000000),
-                c(0x55a8ff),
-                c(0x4ade80),
-                c(0xff5c6c),
-                c(0xa78bfa),
-                c(0xff9f43),
-                c(0x2dd4bf),
-                c(0xf4f4f5),
-                c(0x94a3b8),
+                c(0x5fd0ff),
+                c(0x5cf0a0),
+                c(0xff5c8a),
+                c(0xb79bff),
+                c(0xffb454),
+                c(0x3fe6d4),
+                c(0xf4f6fb),
+                c(0xa3aec6),
             ],
-            flag: c(0xff3b4e),
+            flag: c(0xff3d6e),
             mine: c(0x0b0d14),
-            hit: c(0xe0202f),
-            led_on: c(0xff2d2d),
-            led_off: ca(0xff2d2d, 0.09),
-            led_bg: c(0x0a0505),
-            text: c(0xe8ebf5),
-            muted: c(0x8a93ad),
-            face: 0xffc531,
-            accent: c(0x6aa8ff),
+            hit: c(0xd11a4a),
+            led_on: c(0x3df5e0),
+            led_off: ca(0x3df5e0, 0.08),
+            led_bg: c(0x010608),
+            text: c(0xe6fbf8),
+            muted: c(0x7f95a6),
+            face: 0x8ef5c9,
+            accent: c(0x3df5e0),
         }
     }
 

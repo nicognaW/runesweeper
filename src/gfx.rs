@@ -27,7 +27,11 @@ pub const SELECT: u32 = 11;
 /// data: [t0, 0, 0, 0]: a red flash that cools.
 pub const HEAT: u32 = 12;
 
-const COLORS: [u32; 8] = [0xffc531, 0x6aa8ff, 0xff3b4e, 0x4ade80, 0xffffff, 0xd8d8d8, 0xa78bfa, 0xff2d2d];
+/// Effect colours by index: gold, blue, red, green, white, grey, violet, LED red, phosphor
+/// cyan, alien mint.
+const COLORS: [u32; 10] = [0xffc531, 0x6aa8ff, 0xff3b4e, 0x4ade80, 0xffffff, 0xd8d8d8, 0xa78bfa, 0xff2d2d, 0x3df5e0, 0x8ef5c9];
+pub const PHOSPHOR: f32 = 8.0;
+pub const MINT: f32 = 9.0;
 
 fn col(i: f32) -> Rgb {
     rgb(COLORS[(i.max(0.0) as usize).min(COLORS.len() - 1)])
@@ -40,7 +44,7 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
             colors: if d[0] > 0.5 {
                 Stops::hex(&[0x0b0b0d, 0x26262b, 0x111114, 0x1d1d22])
             } else {
-                Stops::hex(&[0x05060e, 0x1a1f5c, 0x0b2a4a, 0x3a1450, 0x070914])
+                Stops::hex(&[0x010207, 0x04283a, 0x020611, 0x1c0b3c, 0x01030a])
             },
             speed: 0.0,
             drift: 0.0,
@@ -52,12 +56,13 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
                 1 => LiquidMetalParams::gold(),
                 2 => LiquidMetalParams::rose(),
                 3 => LiquidMetalParams::gunmetal(),
-                _ => LiquidMetalParams { light: rgb(0xd6e8ff), iridescence: 0.25, ..LiquidMetalParams::chrome() },
+                // An alien alloy: chrome with a strong thin-film sheen.
+                _ => LiquidMetalParams { light: rgb(0xc8fff6), iridescence: 0.7, ..LiquidMetalParams::chrome() },
             };
             Fx::fill(LiquidMetalParams { flow: 0.0, speed: 0.0, ..p }.border(d[1]))
         }
         LED => Fx::glow(GlowParams { style: GlowStyle::Soft, color: col(d[0]), intensity: d[1], radius: d[2], occlusion: 0.0, ..Default::default() }),
-        FACE => Fx::fill(PlasticParams { color: col(d[0]), roughness: 0.22, dome: 0.55, bevel: 7.0, angle: -0.7 }),
+        FACE => Fx::fill(PlasticParams { color: col(d[0]), roughness: 0.16, dome: 0.7, bevel: 8.0, angle: -0.7 }),
         SHOCK => Fx::distort(DistortParams::Shockwave { at: [origin[0] + d[0], origin[1] + d[1]], reach: 900.0, width: 70.0, amount: d[3], chroma: 0.7, t0: d[2], duration: 0.6 }),
         SPARKLES => Fx::sparkles(SparkleParams {
             burst: Some(d[0]),
@@ -72,22 +77,22 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
             let k = ((t - d[0]) / 0.8).clamp(0.0, 1.0);
             Fx::glow(GlowParams {
                 style: GlowStyle::Aura,
-                color: rgb(0xffc531),
+                color: rgb(0x3df5e0),
                 core: rgb(0xfff4c2),
-                third: rgb(0x6aa8ff),
+                third: rgb(0xb79bff),
                 radius: 22.0,
                 intensity: 0.9 * k,
                 aura_speed: 0.0,
                 ..Default::default()
             })
         }
-        SELECT => Fx::glow(GlowParams { style: GlowStyle::Neon, color: rgb(0x6aa8ff), intensity: d[0], radius: 7.0, occlusion: 0.0, ..Default::default() }),
+        SELECT => Fx::glow(GlowParams { style: GlowStyle::Neon, color: rgb(0x3df5e0), intensity: d[0], radius: 7.0, occlusion: 0.0, ..Default::default() }),
         HEAT => {
             let heat = (-(t - d[0]).max(0.0) / 0.9).exp();
             if heat < 0.01 {
                 return None;
             }
-            Fx::glow(GlowParams { style: GlowStyle::Neon, color: rgb(0xff2d2d), radius: 26.0, intensity: 1.3, heat, ..Default::default() })
+            Fx::glow(GlowParams { style: GlowStyle::Neon, color: rgb(0xff2d55), radius: 26.0, intensity: 1.3, heat, ..Default::default() })
         }
         _ => return None,
     };
@@ -137,9 +142,10 @@ impl Compositor<App> for Gfx {
         f.ui.draw_with_backdrop(f.encoder, f.target, clear, &mut |phase, s: &EffectSite<'_>| {
             let Some(k) = at.iter().position(|n| *n == s.index) else { return };
             match phase {
-                EffectPhase::Backdrop(enc) => {
+                // A shockwave bends the backdrop as it is; only frosted glass would need the blur.
+                EffectPhase::Backdrop(_) => {
                     if let Some(bd) = s.backdrop {
-                        fx.blur_backdrop(device, queue, enc, bd, k);
+                        fx.set_layer_backdrop(device, bd, k);
                     }
                 }
                 EffectPhase::Draw(pass) => fx.draw_layer_in(pass, s.format, s.origin, k),

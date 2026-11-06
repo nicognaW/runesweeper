@@ -15,7 +15,7 @@ fn kit(p: &Palette) -> Kit {
     k
 }
 
-fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
+fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool, boot: bool, delay: f64) -> El {
     let (dw, dh) = (17.0, 30.0);
     // Digits change in the frame they change, as an LED does.
     let mut digits = row().gap(4.0).motion_intent(MotionIntent::STEP);
@@ -24,6 +24,9 @@ fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
         digits = digits.child(digit(ch, dw, dh, on, off));
     }
     let (w, h) = (3.0 * dw + 8.0 + 16.0, dh + 12.0);
+    // At launch the readout strikes up like a tube: on, a dip, then steady.
+    const STRIKE: &[rune::Beat] = &[rune::Beat::new(0.0).opacity(0.0), rune::Beat::new(0.05).opacity(0.9), rune::Beat::new(0.09).opacity(0.25), rune::Beat::new(0.16)];
+    let digits = if boot { digits.sequence(rune::Sequence::new(STRIKE).delay(delay)).motion_intent(MotionIntent::PULSE | MotionIntent::CUT) } else { digits };
     el().key(key)
         .size(w, h)
         .radius(8.0)
@@ -31,7 +34,7 @@ fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
         .box_shadow(inset(1.5, 6.0, ca(0x000000, 0.9)))
         .box_shadow(drop(-1.0, 0.0, ca(0xffffff, 0.06)))
         .center()
-        .child(effect(gfx::LED).effect_data([if gold { 0.0 } else if color { 7.0 } else { 4.0 }, 0.16, 5.0, 0.0]).absolute(6.0, 6.0).size(w - 12.0, h - 12.0).radius(4.0))
+        .child(effect(gfx::LED).effect_data([if gold { 0.0 } else if color { gfx::PHOSPHOR } else { 4.0 }, 0.16, 5.0, 0.0]).absolute(6.0, 6.0).size(w - 12.0, h - 12.0).radius(4.0))
         .child(digits)
         .role("status")
         .label(format!("{key}: {v}"))
@@ -40,7 +43,7 @@ fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
 fn face_button(s: &App, p: &Palette) -> El {
     let sz = 44.0;
     let mood = s.mood();
-    let ink = c(0x1a1206);
+    let ink = c(0x061210);
     el().key("face")
         .size(sz + 8.0, sz + 8.0)
         .radius((sz + 8.0) / 2.0)
@@ -56,7 +59,7 @@ fn face_button(s: &App, p: &Palette) -> El {
             el().size(sz, sz)
                 .radius(sz / 2.0)
                 .box_shadow(drop(2.0, 6.0, ca(0x000000, 0.6)))
-                .child(effect(gfx::FACE).effect_data([if s.saved.color { 0.0 } else { 5.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(sz, sz).radius(sz / 2.0))
+                .child(effect(gfx::FACE).effect_data([if s.saved.color { gfx::MINT } else { 5.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(sz, sz).radius(sz / 2.0))
                 // The expression swaps in the frame it changes, as the original's does.
                 .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT))
                 // A win: one burst of stars off the face (rare, so it gets the delight budget).
@@ -75,11 +78,11 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .box_shadow(inset(1.0, 5.0, ca(0x000000, 0.6)))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.05)))
         .center_y()
-        .child(led("Mines", s.game.counter(), p, s.saved.color, false))
+        .child(led("Mines", s.game.counter(), p, s.saved.color, false, s.boot.is_some(), 0.12))
         .child(spacer())
         .child(face_button(s, p))
         .child(spacer())
-        .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
+        .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won, s.boot.is_some(), 0.22))
 }
 
 fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
@@ -270,13 +273,13 @@ fn icon(p: &Palette) -> El {
                 .gradient(p.console_top, p.console_bottom)
                 .clip_rounded(200.0)
                 .child(effect(gfx::BACKDROP).absolute(0.0, 0.0).size(896.0, 896.0))
-                .child(effect(gfx::RIM).effect_data([1.0, 22.0, 0.0, 0.0]).absolute(0.0, 0.0).size(896.0, 896.0).radius(200.0))
+                .child(effect(gfx::RIM).effect_data([0.0, 22.0, 0.0, 0.0]).absolute(0.0, 0.0).size(896.0, 896.0).radius(200.0))
                 .child(tiles)
                 .child(
                     el().absolute(298.0, 70.0)
                         .size(300.0, 300.0)
-                        .child(effect(gfx::FACE).effect_data([0.0, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(300.0, 300.0).radius(150.0))
-                        .child(face(300.0, crate::icons::Mood::Cool, c(0x1a1206)).absolute(0.0, 0.0)),
+                        .child(effect(gfx::FACE).effect_data([gfx::MINT, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(300.0, 300.0).radius(150.0))
+                        .child(face(300.0, crate::icons::Mood::Smile, c(0x061210)).absolute(0.0, 0.0)),
                 ),
         )
 }
@@ -332,10 +335,12 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if let Some((t, _)) = boom {
         console = console.child(effect(gfx::HEAT).key(format!("heat{}", s.field)).effect_data([t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
-    // The shockwave reads the whole window; it stays mounted (idle, it draws nothing).
+    // The shockwave reads a copy of the whole window, so it's mounted only around a blast
+    // (at the root, outside any fading layer), never left copying the screen every frame.
     let origin = cx.layout("board").map(|r| [r[0], r[1]]).unwrap_or([0.0, 0.0]);
-    let (st, sp) = boom.unwrap_or((-100.0, [0.0, 0.0]));
-    let shock = effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert();
+    let shock = boom.filter(|_| !s.banner_done).map(|(st, sp)| {
+        effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert()
+    });
     let cheat = s.cheat.then(|| {
         let safe = s.hover_cell.is_some_and(|i| !s.game.cells[i].mine);
         el().key("xyzzy").absolute(0.0, 0.0).size(2.0, 2.0).fill(if safe { rune::Color::WHITE } else { rune::Color::BLACK }).inert()
@@ -352,9 +357,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .h_full()
         .fill(p.bg)
         .child(effect(gfx::BACKDROP).key("backdrop").effect_data([if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).w_full().h_full())
+        // Still, so it's cached as one layer and costs nothing frame to frame.
+        .children(cx.layout_size("root").map(|[w, h]| crate::icons::lattice(w, h, p.accent.alpha(if s.saved.color { 0.2 } else { 0.12 })).key("lattice").absolute(0.0, 0.0).cache().inert()))
         .child(body)
         .child(effect(gfx::GRAIN).key("grain").absolute(0.0, 0.0).w_full().h_full().inert())
-        .child(shock)
+        .children(shock)
         .children(cheat);
     rune_kit::root(base, layer)
 }

@@ -63,36 +63,82 @@ pub enum Mood {
 pub fn face(s: f32, mood: Mood, ink: Color) -> El {
     let u = s / 32.0;
     let p = |x: f32, y: f32| [x * u, y * u];
-    let w = 2.1 * u;
+    let w = 1.5 * u;
+    // An almond eye: an ellipse pinched toward its outer corner, tilted up and out.
+    let almond = |cx: f32, cy: f32, ew: f32, eh: f32, outer: f32| -> Vec<[f32; 2]> {
+        let tilt = 0.42 * -outer;
+        (0..28)
+            .map(|k| {
+                let t = k as f32 / 28.0 * std::f32::consts::TAU;
+                let (c, sn) = (t.cos(), t.sin());
+                let pinch = 1.0 - 0.5 * (outer * c).max(0.0);
+                let (x, y) = (ew / 2.0 * c, eh / 2.0 * sn * pinch);
+                let (x, y) = (x * tilt.cos() - y * tilt.sin(), x * tilt.sin() + y * tilt.cos());
+                p(cx + x, cy + y)
+            })
+            .collect()
+    };
+    let glint = ca(0xffffff, 0.85);
     let mut shape = Shape::new();
     match mood {
         Mood::Smile | Mood::Oh => {
-            let r = if mood == Mood::Oh { 2.1 } else { 2.3 };
-            shape = shape.fill(circle(11.5 * u, 12.5 * u, r * u, 16), ink).fill(circle(20.5 * u, 12.5 * u, r * u, 16), ink);
+            let (ew, eh) = if mood == Mood::Oh { (10.6, 7.8) } else { (10.4, 6.2) };
+            for (cx, outer) in [(10.3, -1.0), (21.7, 1.0)] {
+                shape = shape.fill(almond(cx, 14.2, ew, eh, outer), ink).fill(circle((cx - 1.6 * outer.signum() * -1.0) * u, 13.0 * u, 0.9 * u, 10), glint);
+            }
         }
         Mood::Dead => {
-            for cx in [11.5, 20.5] {
+            for cx in [10.8, 21.2] {
                 shape = shape
-                    .line(p(cx - 2.4, 10.1), p(cx + 2.4, 14.9), w * 0.8, LineCap::Round, ink)
-                    .line(p(cx + 2.4, 10.1), p(cx - 2.4, 14.9), w * 0.8, LineCap::Round, ink);
+                    .line(p(cx - 2.6, 11.8), p(cx + 2.6, 16.4), w * 1.2, LineCap::Round, ink)
+                    .line(p(cx + 2.6, 11.8), p(cx - 2.6, 16.4), w * 1.2, LineCap::Round, ink);
             }
         }
         Mood::Cool => {
-            let lens = |x0: f32| vec![p(x0, 10.0), p(x0 + 8.0, 10.0), p(x0 + 7.0, 15.0), p(x0 + 4.0, 16.2), p(x0 + 1.0, 15.0)];
+            // A wraparound visor, lit along its top edge.
+            let visor = vec![p(4.2, 11.4), p(27.8, 11.4), p(26.4, 16.6), p(16.0, 18.4), p(5.6, 16.6)];
             shape = shape
-                .fill(lens(6.8), ink)
-                .fill(lens(17.2), ink)
-                .line(p(4.5, 10.6), p(27.5, 10.6), w * 0.8, LineCap::Round, ink)
-                .line(p(8.5, 11.4), p(11.0, 11.4), 1.0 * u, LineCap::Round, ca(0xffffff, 0.55))
-                .line(p(18.9, 11.4), p(21.4, 11.4), 1.0 * u, LineCap::Round, ca(0xffffff, 0.55));
+                .fill(visor, ink)
+                .line(p(6.6, 12.9), p(13.0, 12.5), 0.9 * u, LineCap::Round, ca(0x3df5e0, 0.95))
+                .line(p(19.0, 12.5), p(25.4, 12.9), 0.9 * u, LineCap::Round, ca(0x3df5e0, 0.95));
         }
     }
     shape = match mood {
-        Mood::Oh => shape.fill(circle(16.0 * u, 21.5 * u, 3.4 * u, 20), ink),
-        Mood::Dead => shape.stroke_path(&Path::new().move_to(p(10.5, 23.5)).quad_to(p(16.0, 18.2), p(21.5, 23.5)), w, LineCap::Round, ink),
-        _ => shape.stroke_path(&Path::new().move_to(p(9.5, 19.0)).quad_to(p(16.0, 25.5), p(22.5, 19.0)), w, LineCap::Round, ink),
+        Mood::Oh => shape.fill(circle(16.0 * u, 23.6 * u, 1.7 * u, 16), ink),
+        Mood::Dead => shape.stroke_path(&Path::new().move_to(p(12.8, 24.2)).quad_to(p(16.0, 22.4), p(19.2, 24.2)), w, LineCap::Round, ink),
+        _ => shape.stroke_path(&Path::new().move_to(p(13.4, 22.6)).quad_to(p(16.0, 24.6), p(18.6, 22.6)), w, LineCap::Round, ink),
     };
     el().size(s, s).shape(shape)
+}
+
+/// A hex lattice `w`×`h`, brightest at the centre and fading out to the edges.
+pub fn lattice(w: f32, h: f32, ink: Color) -> El {
+    let r = 18.0f32;
+    let (dx, dy) = (3f32.sqrt() * r, 1.5 * r);
+    let (cx, cy, reach) = (w / 2.0, h / 2.0, (w * w + h * h).sqrt() / 2.0);
+    let mut sh = Shape::new();
+    let corner = |x: f32, y: f32, k: usize| {
+        let a = std::f32::consts::FRAC_PI_6 + k as f32 * std::f32::consts::FRAC_PI_3;
+        [x + r * a.cos(), y + r * a.sin()]
+    };
+    let rows = (h / dy) as i32 + 2;
+    let cols = (w / dx) as i32 + 2;
+    for row in -1..rows {
+        for col in -1..cols {
+            let x = col as f32 * dx + if row % 2 != 0 { dx / 2.0 } else { 0.0 };
+            let y = row as f32 * dy;
+            let d = ((x - cx).hypot(y - cy) / reach).min(1.0);
+            let a = ink.a * (1.0 - d).powf(1.3);
+            if a < 0.004 {
+                continue;
+            }
+            // Three edges per cell; the neighbours draw the other three.
+            for k in 0..3 {
+                sh = sh.line(corner(x, y, k), corner(x, y, k + 1), 1.0, LineCap::Butt, ink.alpha(a));
+            }
+        }
+    }
+    el().size(w, h).shape(sh)
 }
 
 /// Which of a seven-segment digit's segments are lit, `abcdefg`.

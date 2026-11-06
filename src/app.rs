@@ -74,6 +74,8 @@ pub struct App {
     pub cheat: bool,
     /// Touch screens have no right button: while on, a tap flags (a tap on a number chords).
     pub flag_mode: bool,
+    /// The power-on scan that sweeps the field once at launch (None after the first field).
+    pub boot: Option<rune::Tween<[f32; 4]>>,
     /// Whether this field deals its tiles in (not when a key asked for it).
     pub deal: bool,
     /// The last win beat the level's best time.
@@ -91,7 +93,15 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let saved = storage::load();
-        Self::with(saved, storage::seed())
+        let mut a = Self::with(saved, storage::seed());
+        a.power_on();
+        a
+    }
+
+    /// The launch sweep: a scan line runs down the field once, waking each row as it passes.
+    pub fn power_on(&mut self) {
+        let (bw, bh) = crate::board::size(self);
+        self.boot = Some(rune::Tween::linear([0.0, 0.0, bw, 2.0], [0.0, bh - 2.0, bw, 2.0], Duration::from_secs_f64(crate::board::BOOT)));
     }
 
     pub fn with(saved: Saved, seed: u64) -> App {
@@ -118,6 +128,7 @@ impl App {
             cheat: false,
             icon: false,
             deal: true,
+            boot: None,
             flag_mode: false,
             new_best: false,
             banner_done: false,
@@ -144,6 +155,7 @@ impl App {
     }
 
     fn fresh_field(&mut self) {
+        self.boot = None;
         let (w, h, m) = self.dims();
         self.game = Game::new(w, h, m, storage::seed() ^ self.field as u64);
         self.field += 1;
@@ -413,6 +425,9 @@ impl App {
             }
             Key::Function(2) => {
                 self.new_game_now();
+                // A key swaps the field in one frame: no deal, no fade of the old one.
+                tx.instant();
+                tx.settle();
                 true
             }
             Key::Escape if self.menu.is_some() => {
@@ -436,6 +451,9 @@ impl App {
             }
             Key::Command('n') => {
                 self.new_game_now();
+                // A key swaps the field in one frame: no deal, no fade of the old one.
+                tx.instant();
+                tx.settle();
                 true
             }
             Key::Command('q') | Key::Command('w') => {
