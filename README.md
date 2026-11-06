@@ -43,7 +43,14 @@ that couldn't were cut.
   out from the one you hit, then still.
 - **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
   field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
-- The result banner straddles the field's edge, says how it went, and leaves after 3 s.
+- The result banner straddles the field's edge, says how it went, and leaves after 3 s; its
+  Review action stays behind as a small tab on the console's bottom rim.
+- **A Review** (from that action, or any game in History) replays the game on the field, with a
+  timeline under it marking needless guesses, missed deductions (a pause over 5 s while a cell
+  could be proven), forced guesses (true 50/50 or not) and clicks a chord would have saved, plus
+  3BV, 3BV/s and efficiency. Selecting a marker sets the field to that moment and gives the
+  reason as a hint would, in the hint's words and with no odds. Arrow keys step at once; a step
+  forward lifts the tiles that move opened, as a click does.
 - Shaders do the backdrop, the liquid-metal rim, the plastic face, the LED glow, the blasts and
   the glow, and hold still when nothing is happening: an idle window draws nothing.
 - Entrances and exits use a strong ease-out; nothing grows from nothing. With Reduce Motion on,

@@ -31,18 +31,25 @@ const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.06)
 const BANNER: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.25, 0.0));
 
 pub fn size(s: &App) -> (f32, f32) {
-    (s.game.w as f32 * PITCH - GAP + 2.0 * WELL, s.game.h as f32 * PITCH - GAP + 2.0 * WELL)
+    let g = s.shown();
+    (g.w as f32 * PITCH - GAP + 2.0 * WELL, g.h as f32 * PITCH - GAP + 2.0 * WELL)
 }
 
 fn pos(s: &App, i: usize) -> (f32, f32) {
-    let (x, y) = (i % s.game.w, i / s.game.w);
-    (WELL + x as f32 * PITCH, WELL + y as f32 * PITCH)
+    let w = s.shown().w;
+    (WELL + (i % w) as f32 * PITCH, WELL + (i / w) as f32 * PITCH)
+}
+
+/// The number in the field's element keys: a review's field has its own, so the game in
+/// play's tiles are never reused for it.
+pub fn field_key(s: &App) -> u32 {
+    if s.review.is_some() { s.field | 1 << 31 } else { s.field }
 }
 
 /// Cells drawn sunken under the held pointer: the one pressed, or a chord's 3×3.
 fn pressed(s: &App) -> Vec<usize> {
     let Some(i) = s.press.cell else { return Vec::new() };
-    if s.game.over() || !(s.press.left || s.press.middle) {
+    if s.game.over() || s.review.is_some() || !(s.press.left || s.press.middle) {
         return Vec::new();
     }
     let mut v = vec![i];
@@ -84,10 +91,13 @@ fn number(n: u8, p: &Palette) -> El {
 
 pub fn view(s: &App, reduced: bool) -> El {
     let p = Palette::get(s.saved.color);
-    let g = &s.game;
+    // A review draws its own field, still: no input, no effects, no deal.
+    let live = s.review.is_none();
+    let g = s.shown();
     let (bw, bh) = size(s);
     let sunk = pressed(s);
-    let f = s.field;
+    let f = field_key(s);
+    let still = reduced || !live;
     let lost = g.status == Status::Lost;
     let won = g.status == Status::Won;
     let hit = g.hit.unwrap_or(0);
@@ -133,15 +143,15 @@ pub fn view(s: &App, reduced: bool) -> El {
                         TILE * 0.8,
                         [(0.0, p.blast[0].alpha(0.95)), (0.35, p.blast[1].alpha(0.7)), (1.0, p.blast[2].alpha(0.0))],
                     );
-                    cell = cell.child(with_seq(blast, FLASH, d, reduced).motion_intent(MotionIntent::KICK | MotionIntent::PULSE | MotionIntent::CUT).inert());
+                    cell = cell.child(with_seq(blast, FLASH, d, still).motion_intent(MotionIntent::KICK | MotionIntent::PULSE | MotionIntent::CUT).inert());
                 }
                 let ink = if is_hit { c(0x14060a) } else { p.mine_ink() };
                 let m = mine(TILE * 0.78, ink);
                 let m = if wrong_flag { el().size(TILE, TILE).center().child(m.opacity(0.55)).child(cross(TILE * 0.8, p.flag).absolute(TILE * 0.1, TILE * 0.1)) } else { m };
-                cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, reduced).motion_intent(MotionIntent::BOUNCE));
+                cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, still).motion_intent(MotionIntent::BOUNCE));
             } else if c_.adj > 0 {
                 let n = number(c_.adj, &p).key(format!("n{f}-{i}"));
-                let n = if won && !fresh { with_seq(n, WAVE, wave(i), reduced) } else { n };
+                let n = if won && !fresh { with_seq(n, WAVE, wave(i), still) } else { n };
                 cell = cell.child(n.motion_intent(MotionIntent::BOUNCE));
             }
             opens.push(cell);
@@ -168,18 +178,28 @@ pub fn view(s: &App, reduced: bool) -> El {
             Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::opacity().springs(QUICK))),
             _ => tile,
         };
-        let tile = if won { with_seq(tile, WAVE, wave(i), reduced) } else { with_seq(tile, DEAL, deal(i), reduced || !s.deal) };
+        let tile = if won { with_seq(tile, WAVE, wave(i), still) } else { with_seq(tile, DEAL, deal(i), still || !s.deal) };
         covers.push(tile.motion_intent(MotionIntent::BOUNCE));
     }
 
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
-    let mut board = el()
+    let board = el()
         .key("board")
         .size(bw, bh)
         .radius(12.0)
         .fill(p.well)
         .box_shadow(inset(2.0, 10.0, ca(0x000000, 0.8)))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.06)))
+        .role("grid")
+        .label(s.tr(S::Minefield))
+        // A field a key asked for arrives in one frame, by design.
+        .motion_intent(if s.deal { MotionIntent::NONE } else { MotionIntent::CUT })
+        .children(opens)
+        .children(covers);
+    if !live {
+        return board.children(crate::timeline::rings(s, &p));
+    }
+    let mut board = board
         .cursor(Cursor::Pointer)
         .pointer_buttons([PointerButton::Middle])
         .on_drag(|s: &mut App, d, tx| {
@@ -195,13 +215,7 @@ pub fn view(s: &App, reduced: bool) -> El {
             if !inside {
                 s.hover(None, tx)
             }
-        })
-        .role("grid")
-        .label(s.tr(S::Minefield))
-        // A field a key asked for arrives in one frame, by design.
-        .motion_intent(if s.deal { MotionIntent::NONE } else { MotionIntent::CUT })
-        .children(opens)
-        .children(covers);
+        });
     // A field taking its time: a slow band of light over the hidden tiles, gone in the frame
     // the field lands.
     if let Some(t0) = s.sweep_from {
@@ -266,26 +280,34 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
     if s.banner_done {
         return None;
     }
-    let w = (bw - 16.0).min(270.0);
-    let banner = el()
+    // As wide as the console allows, past the field's sides, so the words fit one line.
+    let w = (bw + 2.0 * PAD - 8.0).min(300.0);
+    // The words, and the Review action beside them: nothing opens by itself.
+    let words = rune::col()
+        .key(format!("banner-words{}", s.field))
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(2.0)
+        .child(text(title).font(UI_BOLD).color(tint))
+        .child(text(sub).font(SMALL).color(p.muted).wrap().w_full())
+        .inert();
+    let banner = rune::row()
             .key(format!("banner{}", s.field))
             // Over the field's bottom edge, so it covers as little of it as it can.
             .absolute((bw - w) / 2.0, bh - 26.0)
-            .size(w, 50.0)
+            .w(w)
+            .min_h(50.0)
+            .px(12.0)
+            .py(6.0)
+            .gap(8.0)
+            .center_y()
             .radius(14.0)
             .fill(ca(0x0b0e19, 0.72))
             .backdrop_blur(10.0)
             .border(1.0, tint.alpha(0.55))
             .box_shadow(drop(10.0, 30.0, ca(0x000000, 0.6)))
-            .center()
-            .child(
-                rune::col()
-                    .items_center()
-                    .gap(2.0)
-                    .child(text(title).font(UI_BOLD).color(tint))
-                    .child(text(sub).font(SMALL).color(p.muted)),
-            )
-            .inert();
+            .child(words)
+            .children(crate::timeline::review_action(s, p, "banner-review"));
     Some(if reduced { banner } else { banner.enter_delay(delay).transition(Transition::opacity().springs(BANNER)) })
 }
 

@@ -8,7 +8,7 @@ use crate::game::{Mode, Status};
 use crate::icons::{digit, face, led_text};
 use crate::strings::S;
 use crate::style::*;
-use crate::{board, callout, gfx, toolbar};
+use crate::{board, callout, gfx, timeline, toolbar};
 
 fn kit(p: &Palette) -> Kit {
     let mut k = Kit::from_palette(PaletteSeed { bg: p.console_top, fg: p.text, accent: p.accent });
@@ -41,7 +41,7 @@ fn led(key: &str, label: String, v: i32, p: &Palette, color: bool, gold: bool) -
 /// Max Guess, once the field is laid: how many true 50/50s it forces, before any is met. A
 /// tab on the console's top rim, so it covers no cell and costs the toolbar no room.
 fn fifty_count(s: &App, p: &Palette, console_w: f32) -> Option<El> {
-    let laid = s.mode == Mode::MaxGuess && !s.unlaid && s.generating.is_none();
+    let laid = s.mode == Mode::MaxGuess && !s.unlaid && s.generating.is_none() && s.review.is_none();
     let label = s.trf(S::FiftyCount, &[&s.fifty_fifties.len()]);
     let tab = el()
         .key("fifty-count")
@@ -87,6 +87,12 @@ fn face_button(s: &App, p: &Palette) -> El {
 }
 
 fn header(s: &App, p: &Palette, width: f32) -> El {
+    // A review shows its own moment: the mines left then, and the timer then.
+    let g = s.shown();
+    let (seconds, gold) = match &s.review {
+        Some(r) => (timeline::seconds(r), false),
+        None => (s.seconds, s.new_best && s.game.status == Status::Won),
+    };
     row().key("header")
         .w(width)
         .h(HEADER_H)
@@ -96,11 +102,11 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .box_shadow(inset(1.0, 5.0, ca(0x000000, 0.6)))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.05)))
         .center_y()
-        .child(led("Mines", s.trf(S::MinesLeft, &[&s.game.counter()]), s.game.counter(), p, s.saved.color, false))
+        .child(led("Mines", s.trf(S::MinesLeft, &[&g.counter()]), g.counter(), p, s.saved.color, false))
         .child(spacer())
         .child(face_button(s, p))
         .child(spacer())
-        .child(led("Time", s.trf(S::Time, &[&s.seconds]), s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
+        .child(led("Time", s.trf(S::Time, &[&seconds]), seconds as i32, p, s.saved.color, gold))
 }
 
 /// The app icon: a raised console tile with the face over a corner of the field.
@@ -150,26 +156,34 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let inner_w = bw.max(9.0 * PITCH + 2.0 * WELL);
     let console_w = inner_w + 2.0 * PAD;
     let console_h = bh + HEADER_H + 12.0 + 2.0 * PAD;
-    let rim = match s.game.status {
+    let live = s.review.is_none();
+    let rim = match s.shown().status {
         // Gold on a win (chrome stays chrome with Color off), gunmetal on a loss.
         Status::Won if s.saved.color => 1.0,
         Status::Lost => 3.0,
         _ => 0.0,
     };
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
-    let boom = s.moments.boom.map(|(t, at)| (t as f32, at));
+    let boom = s.moments.boom.map(|(t, at)| (t as f32, at)).filter(|_| live);
     let reduced = cx.system_reduced_motion() || s.reduced;
     let board_el = board::view(s, reduced);
     // Small windows and phones: draw the console scaled to fit (layout keeps its size). A
-    // hint's callout goes beside it, or over the field clear of the cells it talks about.
+    // hint's callout goes beside it, or over the field clear of the cells it talks about. A
+    // review's timeline takes its room under the console, and its markers' callout goes
+    // where a hint's would.
     let stage = cx.layout_size("stage");
     let callout_w = stage.map_or(callout::WIDTH, |[w, _]| callout::WIDTH.min(w - 2.0 * MARGIN).max(160.0));
-    let callout = callout::view(s, &p, callout_w);
-    let measured = callout::size(cx);
+    let (callout, measured, marks) = if live {
+        (callout::view(s, &p, callout_w), callout::size(cx, "hint-callout"), callout::marks(s))
+    } else {
+        (timeline::view(s, &p, callout_w), callout::size(cx, "review-callout"), timeline::marks(s))
+    };
+    let bar_h = if live { 0.0 } else { cx.layout_size("review").map_or(timeline::BAR_H, |[_, h]| h) + timeline::BAR_GAP };
+    let stage_left = stage.map(|[w, h]| [w, (h - bar_h).max(2.0 * MARGIN + 40.0)]);
     // The rings, from the board's own points to the console's.
     let board_at = (PAD + (inner_w - bw) / 2.0, PAD + HEADER_H + 12.0);
-    let marks: Vec<[f32; 4]> = callout::marks(s).into_iter().map(|[x0, y0, x1, y1]| [x0 + board_at.0, y0 + board_at.1, x1 + board_at.0, y1 + board_at.1]).collect();
-    let place = callout::place(stage, (console_w, console_h), callout.as_ref().map(|_| [callout_w, measured[1]]), &marks);
+    let marks: Vec<[f32; 4]> = marks.into_iter().map(|[x0, y0, x1, y1]| [x0 + board_at.0, y0 + board_at.1, x1 + board_at.0, y1 + board_at.1]).collect();
+    let place = callout::place(stage_left, (console_w, console_h), callout.as_ref().map(|_| [callout_w, measured[1]]), &marks);
     let fit = place.fit();
     let mut console = col()
         .key("console")
@@ -185,8 +199,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
         .child(header(s, &p, inner_w))
         .child(board_el)
-        .children(fifty_count(s, &p, console_w));
-    if s.moments.won.is_some() {
+        .children(fifty_count(s, &p, console_w))
+        .children(timeline::tab(s, &p, console_w, console_h));
+    if s.moments.won.is_some() && live {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
     if let Some((t, _)) = boom {
@@ -209,6 +224,8 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         }
     };
     let play = if right { row().center_y() } else { col().items_center() }.key("play").gap(callout::GAP).child(slot).children(beside);
+    let bar_w = stage.map_or(console_w, |[w, _]| (console_w * fit).max(300.0).min(w - 2.0 * MARGIN));
+    let bar = timeline::bar(s, &p, bar_w);
     let cheat = s.cheat.then(|| {
         let safe = s.pixel_safe;
         el().key("xyzzy").absolute(0.0, 0.0).size(2.0, 2.0).fill(if safe { rune::Color::WHITE } else { rune::Color::BLACK }).inert()
@@ -217,7 +234,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .w_full()
         .h_full()
         .child(toolbar::toolbar(s, &p))
-        .child(col().key("stage").grow(1.0).min_h(0.0).center().p_all(MARGIN).child(play));
+        .child(col().key("stage").grow(1.0).min_h(0.0).center().gap(timeline::BAR_GAP).p_all(MARGIN).child(play).children(bar));
     toolbar::panels(s, &k, &p, &mut layer);
     let base = el()
         .key("root")

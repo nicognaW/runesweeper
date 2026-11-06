@@ -13,10 +13,12 @@ pub mod history;
 pub mod icons;
 pub mod locale;
 pub mod record;
+pub mod review;
 pub mod solver;
 pub mod storage;
 pub mod strings;
 pub mod style;
+pub mod timeline;
 pub mod toolbar;
 pub mod ui;
 
@@ -36,6 +38,8 @@ mod hint_tests;
 mod generating_tests;
 #[cfg(test)]
 mod max_guess_tests;
+#[cfg(test)]
+mod review_tests;
 
 use app::App;
 use game::Level;
@@ -62,6 +66,49 @@ fn play(a: &mut App, opens: &[(usize, usize)]) {
     }
     // A clock that holds still for the picture.
     a.seconds = 42;
+}
+
+/// Plays the field as a strong player with lapses: proofs first, flagging mines and chording
+/// once, a long pause on the 8th move and a needless guess on the 15th; then records the game.
+fn reviewed_game(a: &mut App) {
+    use solver::{Fact, Strength, View, deduce};
+    a.open_at(a.game.idx(a.game.w / 2, a.game.h / 2));
+    for k in 0..600 {
+        if a.game.over() {
+            break;
+        }
+        a.now += if k == 8 { 7.5 } else { 0.7 };
+        let v = View::of(&a.game);
+        let mut facts = vec![Fact::Unknown; v.len()];
+        loop {
+            let proofs = deduce(&v, &facts, Strength::Full);
+            if proofs.is_empty() {
+                break;
+            }
+            for p in proofs {
+                facts[p.cell] = if p.mine { Fact::Mine } else { Fact::Safe };
+            }
+        }
+        let hidden = |i: usize| a.game.cells[i].cover == game::Cover::Hidden;
+        let safe = (0..v.len()).find(|&i| facts[i] == Fact::Safe);
+        if let (15, Some(_)) = (k, safe) {
+            let guess = (0..v.len()).find(|&i| hidden(i) && facts[i] == Fact::Unknown && !a.game.cells[i].mine);
+            if let Some(i) = guess {
+                a.open_at(i);
+                continue;
+            }
+        }
+        if let Some(i) = safe {
+            a.open_at(i);
+        } else if let Some(i) = (0..v.len()).find(|&i| facts[i] == Fact::Mine && hidden(i)) {
+            a.mark_at(i);
+        } else {
+            let known: Vec<Fact> = facts.iter().map(|&f| if f == Fact::Mine { f } else { Fact::Unknown }).collect();
+            let Some(i) = solver::play::guess(&v, &known) else { break };
+            a.open_at(i);
+        }
+    }
+    a.new_game_now();
 }
 
 const SCENES: &[(&str, fn(&mut App))] = &[
@@ -168,6 +215,32 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     }),
     ("hint-zh-cn", |a| {
         SCENES.iter().find(|s| s.0 == "hint").unwrap().1(a);
+        a.set_lang(strings::Lang::ZhCn);
+    }),
+    // A Review of an Intermediate game played by a bot that pauses and guesses where it
+    // needn't: a needless guess's reason beside the field, the timeline under it.
+    ("review", |a| {
+        // The first seed whose game runs long enough to have a few markers.
+        for seed in 1.. {
+            *a = scene(Level::Intermediate, seed);
+            reviewed_game(a);
+            if a.history[0].moves.len() >= 60 {
+                break;
+            }
+        }
+        a.open_review(0);
+        a.review_select(0);
+    }),
+    // A loss through the App, so History has it: the banner offers a Review.
+    ("lost-review", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.open_at(a.game.idx(4, 4));
+        let mine = (0..a.game.cells.len()).find(|&i| a.game.cells[i].mine).unwrap();
+        a.open_at(mine);
+        a.moments.boom = Some((0.05, a.cell_center(mine)));
+    }),
+    ("review-zh-cn", |a| {
+        SCENES.iter().find(|s| s.0 == "review").unwrap().1(a);
         a.set_lang(strings::Lang::ZhCn);
     }),
     ("settings", |a| {

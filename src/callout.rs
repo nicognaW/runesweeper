@@ -24,8 +24,8 @@ impl App {
     /// The Hint action: a fresh hint at its nudge, or one stage deeper into the one shown.
     /// Each fresh hint counts in the game's record, which makes it an assisted game.
     pub fn press_hint(&mut self) {
-        // A field being generated takes no input.
-        if self.game.over() || self.generating.is_some() {
+        // A field being generated takes no input, nor one waiting out a review.
+        if self.game.over() || self.generating.is_some() || self.review.is_some() {
             return;
         }
         if let Some(s) = &mut self.hint {
@@ -151,16 +151,26 @@ pub fn marks(s: &App) -> Vec<[f32; 4]> {
         .copied()
         .chain(h.target.map(|t| t.cell))
         .chain(h.partner())
-        .map(|i| {
-            let (x, y) = (WELL + (i % s.game.w) as f32 * PITCH, WELL + (i / s.game.w) as f32 * PITCH);
-            [x - 2.0, y - 2.0, x + TILE + 2.0, y + TILE + 2.0]
-        })
+        .map(|i| cell_rect(s.game.w, i))
         .collect()
 }
 
-/// The callout's size as last laid out (its height follows its text).
-pub fn size(cx: &rune::Cx<App>) -> [f32; 2] {
-    cx.layout_size("hint-callout").unwrap_or([WIDTH, GUESS_H])
+/// The size of the callout keyed `key` as last laid out (its height follows its text).
+pub fn size(cx: &rune::Cx<App>, key: &str) -> [f32; 2] {
+    cx.layout_size(key).unwrap_or([WIDTH, GUESS_H])
+}
+
+/// A cell's rect ((x0, y0, x1, y1), in the board's own points) on a field `w` cells wide,
+/// with room for its ring.
+pub(crate) fn cell_rect(w: usize, i: usize) -> [f32; 4] {
+    let (x, y) = (WELL + (i % w) as f32 * PITCH, WELL + (i / w) as f32 * PITCH);
+    [x - 2.0, y - 2.0, x + TILE + 2.0, y + TILE + 2.0]
+}
+
+/// A ring on cell `i` of a field `w` cells wide.
+pub(crate) fn ring(key: String, w: usize, i: usize, color: rune::Color) -> El {
+    let [x, y, ..] = cell_rect(w, i);
+    el().key(key).absolute(x, y).size(TILE + 4.0, TILE + 4.0).radius(7.0).border(2.0, color).fill(color.alpha(0.12)).transition(Transition::opacity()).inert()
 }
 
 /// Rings on the numbers (from stage 2) and the cell (from stage 3), in the board's own
@@ -168,11 +178,7 @@ pub fn size(cx: &rune::Cx<App>) -> [f32; 2] {
 pub fn rings(s: &App, p: &Palette) -> Vec<El> {
     let Some(shown) = &s.hint else { return Vec::new() };
     let h = &shown.hint;
-    let at = |i: usize| (WELL + (i % s.game.w) as f32 * PITCH - 2.0, WELL + (i / s.game.w) as f32 * PITCH - 2.0);
-    let ring = |key: String, i: usize, color: rune::Color| {
-        let (x, y) = at(i);
-        el().key(key).absolute(x, y).size(TILE + 4.0, TILE + 4.0).radius(7.0).border(2.0, color).fill(color.alpha(0.12)).transition(Transition::opacity()).inert()
-    };
+    let ring = |key: String, i: usize, color: rune::Color| ring(key, s.game.w, i, color);
     let mut v = Vec::new();
     if shown.stage >= 2 {
         v.extend(h.numbers.iter().map(|&n| ring(format!("hint-n{n}"), n, p.accent)));
@@ -186,7 +192,7 @@ pub fn rings(s: &App, p: &Palette) -> Vec<El> {
     v
 }
 
-fn verdict_color(v: Verdict, p: &Palette) -> rune::Color {
+pub(crate) fn verdict_color(v: Verdict, p: &Palette) -> rune::Color {
     match v {
         Verdict::Safe => p.numbers[2],
         Verdict::Mine | Verdict::WrongFlag | Verdict::Avoid => p.flag,
@@ -194,30 +200,54 @@ fn verdict_color(v: Verdict, p: &Palette) -> rune::Color {
     }
 }
 
-fn line(t: impl Into<String>, font: rune::TextStyle, color: rune::Color) -> El {
+pub(crate) fn line(t: impl Into<String>, font: rune::TextStyle, color: rune::Color) -> El {
     text(t.into()).font(font).color(color).wrap().w_full()
+}
+
+/// The technique's name and its grade.
+pub(crate) fn technique(h: &Hint, lang: crate::strings::Lang, grade_key: &str, p: &Palette) -> El {
+    let mut head = row().w_full().gap(8.0).center_y().child(text(words::name(h.technique, lang)).font(UI_BOLD).color(p.text));
+    if let Some(g) = h.grade() {
+        head = head.child(el().key(grade_key).px(6.0).h(18.0).radius(5.0).center().fill(p.accent.alpha(0.18)).child(text(words::grade(g, lang)).font(SMALL).color(p.accent)));
+    }
+    head
+}
+
+/// A callout's close button.
+pub(crate) fn close(key: &str, label: &str, f: fn(&mut App), p: &Palette) -> El {
+    el().key(key)
+        .size(22.0, 22.0)
+        .radius(6.0)
+        .center()
+        .role("button")
+        .label(label.to_string())
+        .focusable(true)
+        .hover(p.tile_hover)
+        .on_press(f)
+        .child(text("×").font(UI_BOLD).color(p.muted))
+}
+
+/// A callout's surface, styled like the console.
+pub(crate) fn surface(key: &str, label: &str, width: f32, body: El, p: &Palette) -> El {
+    col()
+        .key(key)
+        .role("status")
+        .label(label.to_string())
+        .w(width)
+        .padding(12.0)
+        .radius(14.0)
+        .gradient(p.console_top, p.console_bottom)
+        .border(1.0, p.accent.alpha(0.35))
+        .box_shadow(drop(12.0, 30.0, ca(0x000000, 0.6)))
+        .child(body)
+        .transition(Transition::opacity())
 }
 
 /// The callout: the technique and its grade, then each stage's words, Apply at the end.
 pub fn view(s: &App, p: &Palette, width: f32) -> Option<El> {
     let shown = s.hint.as_ref()?;
     let (h, lang) = (&shown.hint, s.lang);
-    let mut head = row().w_full().gap(8.0).center_y().child(text(words::name(h.technique, lang)).font(UI_BOLD).color(p.text));
-    if let Some(g) = h.grade() {
-        head = head.child(el().key("hint-grade").px(6.0).h(18.0).radius(5.0).center().fill(p.accent.alpha(0.18)).child(text(words::grade(g, lang)).font(SMALL).color(p.accent)));
-    }
-    let close = el()
-        .key("hint-close")
-        .size(22.0, 22.0)
-        .radius(6.0)
-        .center()
-        .role("button")
-        .label(s.tr(S::HintClose))
-        .focusable(true)
-        .hover(p.tile_hover)
-        .on_press(|s: &mut App| s.close_hint())
-        .child(text("×").font(UI_BOLD).color(p.muted));
-    head = head.child(spacer()).child(close);
+    let head = technique(h, lang, "hint-grade", p).child(spacer()).child(close("hint-close", s.tr(S::HintClose), |s: &mut App| s.close_hint(), p));
     // Each stage keeps the nudge and adds its line; the reason, which says it all, stands alone.
     let mut body = col().w_full().gap(6.0).child(head);
     if shown.stage < 4 {
@@ -248,18 +278,5 @@ pub fn view(s: &App, p: &Palette, width: f32) -> Option<El> {
             body = body.child(row().w_full().child(spacer()).child(apply));
         }
     }
-    Some(
-        col()
-            .key("hint-callout")
-            .role("status")
-            .label(s.tr(S::Hint))
-            .w(width)
-            .padding(12.0)
-            .radius(14.0)
-            .gradient(p.console_top, p.console_bottom)
-            .border(1.0, p.accent.alpha(0.35))
-            .box_shadow(drop(12.0, 30.0, ca(0x000000, 0.6)))
-            .child(body)
-            .transition(Transition::opacity()),
-    )
+    Some(surface("hint-callout", s.tr(S::Hint), width, body, p))
 }

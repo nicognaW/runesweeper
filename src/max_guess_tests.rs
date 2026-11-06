@@ -28,7 +28,7 @@ fn laid(rt: &mut Runtime<App>) -> generate::MaxGuess {
 
 /// The banner's text, once the game has ended.
 fn banner(rt: &Runtime<App>) -> String {
-    text_in(rt, &format!("banner{}", rt.state.field))
+    text_in(rt, &format!("banner-words{}", rt.state.field))
 }
 
 #[test]
