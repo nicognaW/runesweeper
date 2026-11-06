@@ -19,3 +19,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The fonts under assets/fonts/ are not covered by the MIT License above:
+
+- MiSans VF (assets/fonts/MiSans/) is © Beijing Xiaomi Mobile Software Co., Ltd. and is used
+  under the MiSans Font Intellectual Property License Agreement, kept beside it and in
+  NOTICES.txt. It may not be redistributed on its own or modified.
+- Inter (assets/fonts/Inter/) is under the SIL Open Font License 1.1, in
+  assets/fonts/Inter/LICENSE.txt and NOTICES.txt.
