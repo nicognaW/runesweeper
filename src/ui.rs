@@ -8,7 +8,7 @@ use crate::game::Status;
 use crate::icons::{digit, face, led_text};
 use crate::strings::S;
 use crate::style::*;
-use crate::{board, gfx, toolbar};
+use crate::{board, callout, gfx, toolbar};
 
 fn kit(p: &Palette) -> Kit {
     let mut k = Kit::from_palette(PaletteSeed { bg: p.console_top, fg: p.text, accent: p.accent });
@@ -140,8 +140,17 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let boom = s.moments.boom.map(|(t, at)| (t as f32, at));
     let reduced = cx.system_reduced_motion() || s.reduced;
     let board_el = board::view(s, reduced);
-    // Small windows and phones: draw the console scaled to fit (layout keeps its size).
-    let fit = cx.layout_size("stage").map_or(1.0, |[w, h]| ((w - 2.0 * MARGIN) / console_w).min((h - 2.0 * MARGIN) / console_h).clamp(0.3, 1.0));
+    // Small windows and phones: draw the console scaled to fit (layout keeps its size). A
+    // hint's callout goes beside it, or over the field clear of the cells it talks about.
+    let stage = cx.layout_size("stage");
+    let callout_w = stage.map_or(callout::WIDTH, |[w, _]| callout::WIDTH.min(w - 2.0 * MARGIN).max(160.0));
+    let callout = callout::view(s, &p, callout_w);
+    let measured = callout::size(cx);
+    // The rings, from the board's own points to the console's.
+    let board_at = (PAD + (inner_w - bw) / 2.0, PAD + HEADER_H + 12.0);
+    let marks: Vec<[f32; 4]> = callout::marks(s).into_iter().map(|[x0, y0, x1, y1]| [x0 + board_at.0, y0 + board_at.1, x1 + board_at.0, y1 + board_at.1]).collect();
+    let place = callout::place(stage, (console_w, console_h), callout.as_ref().map(|_| [callout_w, measured[1]]), &marks);
+    let fit = place.fit();
     let mut console = col()
         .key("console")
         .scale(fit)
@@ -169,6 +178,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let shock = boom.filter(|_| !s.shock_done).map(|(st, sp)| {
         effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert()
     });
+    // The console drawn at `fit` in a slot of that size, so the callout sits beside what shows.
+    let mut slot = el().key("console-slot").size(console_w * fit, console_h * fit).child(console.absolute((console_w * fit - console_w) / 2.0, (console_h * fit - console_h) / 2.0));
+    let (right, beside) = match place {
+        callout::Place::Beside { right, .. } => (right, callout),
+        callout::Place::Over { x, y, .. } => {
+            slot = slot.children(callout.map(|c| c.absolute(x, y)));
+            (false, None)
+        }
+    };
+    let play = if right { row().center_y() } else { col().items_center() }.key("play").gap(callout::GAP).child(slot).children(beside);
     let cheat = s.cheat.then(|| {
         let safe = s.pixel_safe;
         el().key("xyzzy").absolute(0.0, 0.0).size(2.0, 2.0).fill(if safe { rune::Color::WHITE } else { rune::Color::BLACK }).inert()
@@ -177,7 +196,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .w_full()
         .h_full()
         .child(toolbar::toolbar(s, &p))
-        .child(col().key("stage").grow(1.0).min_h(0.0).center().p_all(MARGIN).child(console));
+        .child(col().key("stage").grow(1.0).min_h(0.0).center().p_all(MARGIN).child(play));
     toolbar::panels(s, &k, &p, &mut layer);
     let base = el()
         .key("root")

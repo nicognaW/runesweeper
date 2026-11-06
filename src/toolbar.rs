@@ -18,6 +18,12 @@ static SETTINGS: Icon = Icon {
     body: r#"<path d="M2.5 4.5H13.5M2.5 11.5H13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="4.5" r="1.9" fill="currentColor"/><circle cx="6" cy="11.5" r="1.9" fill="currentColor"/>"#,
 };
 
+static HINT: Icon = Icon {
+    name: "runesweeper-hint",
+    view: 16.0,
+    body: r#"<path d="M8 1.8a4.4 4.4 0 0 0-2.6 7.9c.5.4.8 1 .8 1.6v.4h3.6v-.4c0-.6.3-1.2.8-1.6A4.4 4.4 0 0 0 8 1.8Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/><path d="M6.4 13.9h3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>"#,
+};
+
 static CHEVRON: Icon = Icon {
     name: "runesweeper-chevron",
     view: 16.0,
@@ -78,12 +84,17 @@ fn flag_toggle(s: &App, p: &Palette) -> El {
     if on { t.fill(p.flag).box_shadow(drop(0.0, 12.0, p.flag.alpha(0.55))) } else { t }
 }
 
-/// The buttons on the toolbar's right, in order. Hint and History join them here.
+/// The buttons on the toolbar's right, in order.
 fn tools(s: &App, p: &Palette) -> Vec<El> {
     let mut v = Vec::new();
     if s.touch {
         v.push(flag_toggle(s, p));
     }
+    v.push(
+        tool("hint-button", s.tr(S::Hint), icon(&HINT, 16.0).color(p.text), p)
+            .expanded(s.hint.is_some())
+            .on_press(|s: &mut App| s.press_hint()),
+    );
     v.push(
         tool("history-button", s.tr(S::History), icon(&history::HISTORY, 16.0).color(p.text), p)
             .expanded(s.panel == Some(Panel::History))
