@@ -471,3 +471,22 @@ fn the_mine_count_leaves_out_the_mines_already_flagged() {
     assert_eq!(en(&h), ["Every mine is found, so every other hidden cell is safe."]);
     assert_eq!(zh(&h), ["根据剩余雷数：雷已经全部找到了……所以其余的格子全部安全。"]);
 }
+
+/// A hole or a triangle is its diagram's exact shape (minesweeper.online's H1–H3, T1–T5):
+/// the same two numbers with their shared cells arranged any other way are a plain 1-1 or
+/// 1-2C, graded Medium, not Evil.
+#[test]
+fn a_one_one_or_one_two_in_another_shape_is_no_triangle() {
+    // T1 and T5 (catalogue fixtures) with the cell beside the upper number opened, so the
+    // shared cells run diagonally across the pair instead of coming to a point.
+    for (rows, technique) in [
+        (["#####", "#####", "*..*#", "##...", "*....", "#*...", "###*#"], Technique::Pattern(Pattern::OneOnePlus)),
+        (["#####", "#####", "*..*#", "##...", "#*...", "##...", "###*#"], Technique::Pattern(Pattern::OneTwoC)),
+    ] {
+        let p = pos(&rows);
+        let h = p.hint(Some((2, 2)));
+        assert_eq!(h.technique, technique, "{rows:?}");
+        assert_eq!(h.grade(), Some(Grade::Medium), "{rows:?}");
+        assert_eq!((h.numbers, h.target.map(|t| (t.cell, t.verdict))), (vec![p.at(2, 3), p.at(2, 2)], Some((p.at(1, 1), Verdict::Safe))), "{rows:?}");
+    }
+}
