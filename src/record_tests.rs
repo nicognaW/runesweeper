@@ -122,6 +122,7 @@ fn the_move_list_rebuilds_the_same_final_field() {
         a.mark_at(0);
         a.mark_at(0);
         a.open_at(a.game.idx(a.game.w / 2, a.game.h / 2));
+        a.finish_laying();
         let mut chorded = false;
         for _ in 0..40 {
             let g = &a.game;

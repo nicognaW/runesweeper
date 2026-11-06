@@ -86,6 +86,7 @@ fn the_first_click_lays_the_field_its_seed_names_and_opens_an_area() {
         let i = middle(&a);
         let seed = a.seed;
         a.open_at(i);
+        a.finish_laying();
         let want = generate::lay(Mode::NoGuess, a.dims(), seed, i);
         let got: Vec<bool> = a.game.cells.iter().map(|c| c.mine).collect();
         assert_eq!(got, want.cells.iter().map(|c| c.mine).collect::<Vec<_>>(), "{level:?}");
@@ -114,6 +115,8 @@ fn the_timer_starts_when_the_field_is_ready() {
     let i = middle(&a);
     a.open_at(i);
     assert_eq!(a.started_at, None, "the clock waits while the field is laid");
+    a.finish_laying();
+    assert_eq!(a.started_at, None, "the clock waits for a poll");
     // The first poll after the field is ready starts it: the time spent laying never counts.
     a.tick(14.0, &mut tx);
     assert_eq!(a.started_at, Some(14.0));
@@ -146,6 +149,7 @@ fn flags_before_the_first_click_stay_and_the_counter_is_mines_less_flags() {
     a.tick(1.0, &mut tx);
     assert_eq!(a.started_at, None, "the clock waits for the field");
     a.open_at(middle(&a));
+    a.finish_laying();
     assert_eq!(mines(&a), 10);
     assert_eq!(a.game.cells[corner].cover, Cover::Flag, "the flag stays");
     assert_eq!(a.game.counter(), 9);
@@ -176,6 +180,7 @@ fn a_gentle_first_click_lays_the_field_its_seed_names_and_opens_an_area() {
     let mut a = App::with(Saved { mode: Mode::GentleNoGuess, ..Saved::default() }, 3);
     let (i, seed) = (middle(&a), a.seed);
     a.open_at(i);
+    a.finish_laying();
     let want = generate::lay(Mode::GentleNoGuess, a.dims(), seed, i);
     assert_eq!(a.game.cells.iter().map(|c| c.mine).collect::<Vec<_>>(), want.cells.iter().map(|c| c.mine).collect::<Vec<_>>());
     assert!(a.game.opened > 1, "the first click opens an area");
