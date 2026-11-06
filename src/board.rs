@@ -1,7 +1,7 @@
 //! The minefield: tiles, the numbers under them, the selector and the board's own effects.
 //!
-//! Each cell has at most one cover element for its whole life in a field (`t{field}-{i}`), so
-//! dealing, lifting off and the win wave are one element changing its sequence, never a swap.
+//! Numbers appear as soon as they open; the flood wave is light beneath them, never a cover
+//! obscuring playable information. The exact selector and its soft pointer lamp are separate.
 
 use rune::{Beat, Color, Cursor, El, MotionIntent, PointerButton, Sequence, Spring, Transition, effect, el, text};
 use rune_motion::Easing;
@@ -14,20 +14,18 @@ use crate::style::*;
 
 /// Emil Kowalski's strong ease-out: for everything entering or leaving.
 const OUT: Easing = Easing::cubic(0.23, 1.0, 0.32, 1.0);
-/// A tile lifting off as its cell opens: a quick swell, then gone (240 ms).
-const VANISH: &[Beat] = &[Beat::new(0.0), Beat::new(0.06).scale(1.06).easing(OUT), Beat::new(0.24).opacity(0.0).scale(0.85).easing(OUT)];
+/// A quick pool of light under newly opened numbers (250 ms).
+const REVEAL: &[Beat] = &[Beat::new(0.0).opacity(0.46).scale(0.97), Beat::new(0.25).opacity(0.0).easing(OUT)];
 /// A mine coming up as the chain reaches it (220 ms).
 const POP: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.22).easing(Easing::OVERSHOOT)];
 /// A new field dealing its tiles in (220 ms each).
 const DEAL: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.8), Beat::new(0.22).easing(OUT)];
 /// The win: a swell that runs across the field (rare: the delight budget).
 const WAVE: &[Beat] = &[Beat::new(0.0), Beat::new(0.14).scale(1.2).easing(OUT), Beat::new(0.36).easing(Easing::EASE_IN_OUT)];
-/// Fades on frequent surfaces: 150 ms in and out.
-const QUICK: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.15, 0.0));
+/// Short flag feedback, with a faster exit.
+const QUICK: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.12, 0.0));
 /// A mine going off: the flash behind it (300 ms).
 const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.06).scale(1.3).easing(OUT), Beat::new(0.3).opacity(0.0).scale(1.0).easing(OUT)];
-/// The result banner: in quick, out a little slower once it's been read.
-const BANNER: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.25, 0.0));
 
 pub fn size(s: &App) -> (f32, f32) {
     (s.game.w as f32 * PITCH - GAP + 2.0 * WELL, s.game.h as f32 * PITCH - GAP + 2.0 * WELL)
@@ -69,7 +67,6 @@ fn raised(p: &Palette, sunk: bool, light: f32, gold: bool) -> El {
         .box_shadow(drop(1.5, 3.0, ca(0x000000, 0.55)))
         .box_shadow(inset(1.0, 0.0, p.tile_light))
         .box_shadow(inset(-1.0, 1.0, ca(0x000000, 0.25)))
-        .hover(p.tile_hover)
 }
 
 /// A number with a soft halo of its own colour.
@@ -82,6 +79,7 @@ fn number(n: u8, p: &Palette) -> El {
 }
 
 pub fn view(s: &App, reduced: bool) -> El {
+    let quiet = reduced || !s.spatial;
     let p = Palette::get(s.saved.color);
     let g = &s.game;
     let (bw, bh) = size(s);
@@ -116,48 +114,43 @@ pub fn view(s: &App, reduced: bool) -> El {
         if open {
             // The mine stepped on, and any others a wrong chord uncovered.
             let is_hit = lost && c_.mine && c_.cover == Cover::Open;
-            let mut cell = el().key(format!("o{f}-{i}")).absolute(x, y).size(TILE, TILE).radius(4.0).center();
+            let mut cell = el().key(format!("t{f}-{i}")).absolute(x, y).size(TILE, TILE).radius(4.0).center().transition(Transition::none()).motion(Spring::NONE);
             cell = if is_hit {
                 cell.radial_gradient([0.5, 0.5], TILE * 0.75, [(0.0, p.hit_core), (1.0, p.hit)])
             } else {
                 cell.fill(p.open).border(1.0, p.open_edge).box_shadow(inset(1.0, 2.0, ca(0x000000, 0.35)))
             };
-            let fresh = c_.turn == g.turn && c_.cover == Cover::Open;
+            let fresh = s.reveal_turns.contains(&c_.turn) && c_.cover == Cover::Open;
             if c_.mine || wrong_flag {
                 let d = boom(i);
-                if c_.mine {
+                if c_.mine && !quiet {
                     // The blast behind each mine as the chain reaches it.
                     let blast = el().key(format!("b{f}-{i}")).absolute(-6.0, -6.0).size(TILE + 12.0, TILE + 12.0).radius(TILE).radial_gradient(
                         [0.5, 0.5],
                         TILE * 0.8,
                         [(0.0, p.blast[0].alpha(0.95)), (0.35, p.blast[1].alpha(0.7)), (1.0, p.blast[2].alpha(0.0))],
                     );
-                    cell = cell.child(with_seq(blast, FLASH, d, reduced).motion_intent(MotionIntent::KICK | MotionIntent::PULSE | MotionIntent::CUT).inert());
+                    cell = cell.child(with_seq(blast, FLASH, d, false).motion_intent(MotionIntent::KICK | MotionIntent::PULSE | MotionIntent::CUT).inert());
                 }
                 let ink = if is_hit { c(0x14060a) } else { p.mine_ink() };
                 let m = mine(TILE * 0.78, ink);
                 let m = if wrong_flag { el().size(TILE, TILE).center().child(m.opacity(0.55)).child(cross(TILE * 0.8, p.flag).absolute(TILE * 0.1, TILE * 0.1)) } else { m };
-                cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, reduced).motion_intent(MotionIntent::BOUNCE));
+                cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, quiet).motion_intent(MotionIntent::BOUNCE));
             } else if c_.adj > 0 {
-                let n = number(c_.adj, &p).key(format!("n{f}-{i}"));
-                let n = if won && !fresh { with_seq(n, WAVE, wave(i), reduced) } else { n };
-                cell = cell.child(n.motion_intent(MotionIntent::BOUNCE));
+                if fresh && !quiet {
+                    cell = cell.child(reveal_light(f, i, &p, ripple(i)));
+                }
+                let n = number(c_.adj, &p).key(format!("n{f}-{i}")).transition(Transition::none()).motion_intent(MotionIntent::CUT);
+                // The number itself stays still, including during the victory sweep.
+                cell = cell.child(n);
+            } else if fresh && !quiet {
+                cell = cell.child(reveal_light(f, i, &p, ripple(i)));
             }
             opens.push(cell);
-            // The tile that was here lifts off, in a ripple out from the click (or the blast).
-            if (fresh || shown_mine) && !reduced {
-                let d = if shown_mine { (boom(i) - 0.1).max(0.0) } else { ripple(i) };
-                covers.push(
-                    with_seq(raised(&p, false, light(i), false).key(format!("t{f}-{i}")).absolute(x, y), VANISH, d, false)
-                        .motion_intent(MotionIntent::BOUNCE)
-                        .transition(Transition::none())
-                        .inert(),
-                );
-            }
             continue;
         }
         let gold = won && c_.cover == Cover::Flag;
-        let tile = raised(&p, sunk.contains(&i), light(i), gold).key(format!("t{f}-{i}")).absolute(x, y).center();
+        let tile = raised(&p, sunk.contains(&i), light(i), gold).key(format!("t{f}-{i}")).absolute(x, y).center().transition(Transition::none()).motion(Spring::NONE);
         let tile = match c_.cover {
             Cover::Flag => tile.child(
                 flag(TILE * 0.92, p.flag, p.pole())
@@ -167,7 +160,7 @@ pub fn view(s: &App, reduced: bool) -> El {
             Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::opacity().springs(QUICK))),
             _ => tile,
         };
-        let tile = if won { with_seq(tile, WAVE, wave(i), reduced) } else { with_seq(tile, DEAL, deal(i), reduced || !s.deal) };
+        let tile = if won { with_seq(tile, WAVE, wave(i), quiet) } else { with_seq(tile, DEAL, deal(i), quiet || !s.deal) };
         covers.push(tile.motion_intent(MotionIntent::BOUNCE));
     }
 
@@ -188,22 +181,39 @@ pub fn view(s: &App, reduced: bool) -> El {
         .on_secondary_press_local(|s: &mut App, e, tx| s.on_board_secondary(e.x, e.y, tx))
         .on_pointer_move_local(|s: &mut App, e, tx| {
             let c = s.cell_at(e.x, e.y);
+            s.pointer_light(e.x, e.y);
             s.hover(c, tx)
         })
         .on_hover_change(|s: &mut App, inside, tx| {
             if !inside {
                 s.hover(None, tx)
             }
+            tx.live_only();
         })
         .role("grid")
         .label("Minefield")
         // A field a key asked for arrives in one frame, by design.
-        .motion_intent(if s.deal { MotionIntent::NONE } else { MotionIntent::CUT })
+        .motion_intent(if s.deal && s.spatial { MotionIntent::NONE } else { MotionIntent::CUT })
         .children(opens)
         .children(covers);
+    if !reduced {
+        board = board.child(
+            el().key("pointer-light")
+                .absolute(0.0, 0.0)
+                .size(120.0, 120.0)
+                .pixel_snap(false)
+                .radial_gradient([0.5, 0.5], 60.0, [(0.0, p.accent.alpha(0.10)), (0.35, p.tile_light.alpha(0.04)), (1.0, Color::TRANSPARENT)])
+                .live_offset(s.light_at.smooth(Spring::new(0.16, 0.0)))
+                .live_opacity(s.light_on.smooth(Spring::new(0.12, 0.0)).rest(Spring::new(0.18, 0.0)))
+                // Entry and large pointer teleports snap before the light fades in.
+                .motion_intent(MotionIntent::STEP | MotionIntent::IMPULSE)
+                .inert(),
+        );
+    }
     // The selector sits on the cell under the pointer, without re-running the view.
     board = board.child(
         el().key("selector")
+            .motion_intent(MotionIntent::STEP | MotionIntent::CUT)
             .absolute(0.0, 0.0)
             .size(TILE, TILE)
             .radius(5.0)
@@ -213,7 +223,8 @@ pub fn view(s: &App, reduced: bool) -> El {
             .inert()
             .child(effect(gfx::SELECT).effect_data([0.6, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(12.0).absolute(0.0, 0.0).size(TILE, TILE).radius(5.0)),
     );
-    board = board.child(
+    if !quiet && won {
+        board = board.child(
         effect(gfx::SPARKLES)
             .key("burst")
             .effect_data([won_t, if won { 30.0 } else { 0.0 }, 9.0, if s.saved.color { 0.0 } else { 1.0 }])
@@ -222,46 +233,36 @@ pub fn view(s: &App, reduced: bool) -> El {
             .size(bw, bh)
             .radius(12.0)
             .inert(),
-    );
-    board.children(banner(s, &p, bw, bh, reduced))
+        );
+    }
+    board
 }
 
-/// The line that says how it went, over the bottom of the field.
-fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
-    let (title, sub, tint, delay) = match s.game.status {
+fn reveal_light(field: u32, i: usize, p: &Palette, delay: f64) -> El {
+    el().key(format!("reveal-{field}-{i}"))
+        .absolute(0.0, 0.0)
+        .size(TILE, TILE)
+        .radius(4.0)
+        .radial_gradient([0.5, 0.5], TILE * 0.75, [(0.0, p.accent), (1.0, Color::TRANSPARENT)])
+        .sequence(Sequence::new(REVEAL).delay(delay))
+        .transition(Transition::none())
+        .inert()
+}
+
+/// A reserved line below the field: never covers cells or moves the console.
+pub fn result(s: &App, p: &Palette, width: f32) -> El {
+    let (title, tint) = match s.game.status {
         Status::Won => (
-            format!("Cleared in {} second{}", s.seconds, if s.seconds == 1 { "" } else { "s" }),
-            if s.new_best { format!("New best for {}", s.level.name()) } else { "F2 or the face for another".into() },
+            format!("Cleared · {}s", s.seconds),
             p.win,
-            0.3,
         ),
-        Status::Lost => ("Boom.".to_string(), "F2 or the face to try again".to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
-        _ => return None,
+        Status::Lost => ("Mine hit".to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }),
+        _ => (String::new(), p.muted),
     };
-    if s.banner_done {
-        return None;
-    }
-    let w = (bw - 16.0).min(270.0);
-    let banner = el()
-            .key(format!("banner{}", s.field))
-            // Over the field's bottom edge, so it covers as little of it as it can.
-            .absolute((bw - w) / 2.0, bh - 26.0)
-            .size(w, 50.0)
-            .radius(14.0)
-            .fill(ca(0x0b0e19, 0.72))
-            .backdrop_blur(10.0)
-            .border(1.0, tint.alpha(0.55))
-            .box_shadow(drop(10.0, 30.0, ca(0x000000, 0.6)))
-            .center()
-            .child(
-                rune::col()
-                    .items_center()
-                    .gap(2.0)
-                    .child(text(title).font(UI_BOLD).color(tint))
-                    .child(text(sub).font(SMALL).color(p.muted)),
-            )
-            .inert();
-    Some(if reduced { banner } else { banner.enter_delay(delay).transition(Transition::opacity().springs(BANNER)) })
+    el().key("result").size(width, RESULT_H).center()
+        .role("status")
+        .child(text(if s.banner_done { String::new() } else { title }).font(SMALL).color(tint))
+        .inert()
 }
 
 impl Palette {

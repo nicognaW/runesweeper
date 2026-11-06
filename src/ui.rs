@@ -37,7 +37,7 @@ fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
         .label(format!("{key}: {v}"))
 }
 
-fn face_button(s: &App, p: &Palette) -> El {
+fn face_button(s: &App, p: &Palette, quiet: bool) -> El {
     let sz = 44.0;
     let mood = s.mood();
     let ink = c(0x1a1206);
@@ -47,7 +47,8 @@ fn face_button(s: &App, p: &Palette) -> El {
         .fill(ca(0x000000, 0.35))
         .box_shadow(inset(1.0, 4.0, ca(0x000000, 0.8)))
         .center()
-        .press_scale(0.9)
+        .press_scale(0.96)
+        .motion(rune::Spring::new(0.15, 0.0))
         .role("button")
         .label("New game")
         .focusable(true)
@@ -60,12 +61,12 @@ fn face_button(s: &App, p: &Palette) -> El {
                 // The expression swaps in the frame it changes, as the original's does.
                 .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT))
                 // A win: one burst of stars off the face (rare, so it gets the delight budget).
-                .children(s.moments.won.map(|t| effect(gfx::SPARKLES).key(format!("face-burst{}", s.field)).effect_data([t as f32 + 0.15, 8.0, 7.0, if s.saved.color { 0.0 } else { 1.0 }]).effect_bleed(36.0).absolute(0.0, 0.0).size(sz, sz).inert())),
+                .children(s.moments.won.filter(|_| !quiet).map(|t| effect(gfx::SPARKLES).key(format!("face-burst{}", s.field)).effect_data([t as f32 + 0.15, 8.0, 7.0, if s.saved.color { 0.0 } else { 1.0 }]).effect_bleed(36.0).absolute(0.0, 0.0).size(sz, sz).inert())),
         )
         .hover(p.tile_hover)
 }
 
-fn header(s: &App, p: &Palette, width: f32) -> El {
+fn header(s: &App, p: &Palette, width: f32, quiet: bool) -> El {
     row().key("header")
         .w(width)
         .h(HEADER_H)
@@ -77,7 +78,7 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .center_y()
         .child(led("Mines", s.game.counter(), p, s.saved.color, false))
         .child(spacer())
-        .child(face_button(s, p))
+        .child(face_button(s, p, quiet))
         .child(spacer())
         .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
 }
@@ -131,21 +132,13 @@ fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
         }))
         .on_close(|s: &mut App| s.menu = None)
         .build(k, layer);
-    let help = KitMenu::new("help-menu")
-        .trigger(trigger("Help", Menu::Help))
-        .open(s.menu == Some(Menu::Help))
-        .min_width(190.0)
-        .item(MenuItem::new("How to Play").on_select(|s: &mut App| {
-            s.menu = None;
-            s.dialog = Some(Dialog::HowTo);
-        }))
-        .separator()
-        .item(MenuItem::new("About Runesweeper…").on_select(|s: &mut App| {
+    let about = Button::new("About")
+        .variant(ButtonVariant::Ghost)
+        .on_press(|s: &mut App| {
             s.menu = None;
             s.dialog = Some(Dialog::About);
-        }))
-        .on_close(|s: &mut App| s.menu = None)
-        .build(k, layer);
+        })
+        .build(k);
     row().key("menubar")
         .w_full()
         .h(MENU_H)
@@ -155,7 +148,7 @@ fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
         .fill(ca(0x000000, 0.25))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.06)))
         .child(game)
-        .child(help)
+        .child(about)
         .child(spacer())
         .children(touch_first().then(|| {
             Button::new(if s.flag_mode { "Flagging" } else { "Flag" })
@@ -225,10 +218,10 @@ fn dialogs(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) {
             let level = [Level::Beginner, Level::Intermediate, Level::Expert][li];
             let body = col()
                 .gap(12.0)
-                .child(text(format!("You have the fastest time for {} level. Please type your name.", level.name().to_lowercase())).font(UI).color(p.text).wrap())
+                .child(text(format!("{} · {}s", level.name(), s.seconds)).font(UI).color(p.text).wrap())
                 .child(TextInput::new(&s.edit_name).width(Some(300.0)).on_edit(|s: &mut App| &mut s.edit_name).on_submit(move |s: &mut App, _| s.save_record(li)).build(k))
                 .child(buttons(ok("OK").on_press(move |s: &mut App| s.save_record(li)).build(k), None));
-            KitDialog::new("record", "New Record").open(true).fit().width(340.0).child(body.px(20.0).pb(4.0)).on_close(move |s: &mut App| s.save_record(li)).build(k, layer);
+            KitDialog::new("record", "New best time").open(true).fit().width(340.0).child(body.px(20.0).pb(4.0)).on_close(move |s: &mut App| s.save_record(li)).build(k, layer);
         }
         Dialog::About => {
             let body = col()
@@ -239,20 +232,7 @@ fn dialogs(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) {
                 .child(buttons(ok("OK").on_press(close).build(k), None));
             KitDialog::new("about", "About Runesweeper").open(true).fit().width(340.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
         }
-        Dialog::HowTo => {
-            let lines = [
-                "Left click opens a square. A number counts the mines touching it.",
-                "Right click flags a mine; again for ?, again to clear (Game ▸ Marks).",
-                "With a number's flags placed, click both buttons (or the middle one) on it to open its other neighbours.",
-                "Open every square without a mine to win. F2 or the face starts again.",
-            ];
-            let mut body = col().gap(8.0);
-            for l in lines {
-                body = body.child(text(l).font(UI).color(p.text).wrap());
-            }
-            body = body.child(buttons(ok("OK").on_press(close).build(k), None));
-            KitDialog::new("howto", "How to Play").open(true).fit().width(380.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
-        }
+
     }
 }
 
@@ -302,7 +282,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let (bw, bh) = board::size(s);
     let inner_w = bw.max(9.0 * PITCH + 2.0 * WELL);
     let console_w = inner_w + 2.0 * PAD;
-    let console_h = bh + HEADER_H + 12.0 + 2.0 * PAD;
+    let console_h = bh + HEADER_H + 24.0 + RESULT_H + 2.0 * PAD;
     let rim = match s.game.status {
         // Gold on a win (chrome stays chrome with Color off), gunmetal on a loss.
         Status::Won if s.saved.color => 1.0,
@@ -312,6 +292,8 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
     let boom = s.moments.boom.map(|(t, at)| (t as f32, at));
     let reduced = cx.system_reduced_motion() || s.reduced;
+    cx.reduced_motion(reduced);
+    let quiet = reduced || !s.spatial;
     let board_el = board::view(s, reduced);
     // Small windows and phones: draw the console scaled to fit (layout keeps its size).
     let fit = cx.layout_size("stage").map_or(1.0, |[w, h]| ((w - 2.0 * MARGIN) / console_w).min((h - 2.0 * MARGIN) / console_h).clamp(0.3, 1.0));
@@ -327,28 +309,20 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(drop(24.0, 60.0, ca(0x000000, 0.7)))
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
-        .child(header(s, &p, inner_w))
+        .child(header(s, &p, inner_w, quiet))
         .child(board_el)
-        // Out of the layout, so the console doesn't move when it goes.
-        .children(hint(s, &p).map(|h| {
-            col().key("hint")
-                .absolute(0.0, console_h + 12.0)
-                .w(console_w)
-                .items_center()
-                .child(h)
-                .transition(rune::Transition::opacity().springs(rune_motion::SpringPair::new(rune::Spring::new(0.2, 0.0), rune::Spring::new(0.2, 0.0))))
-        }));
-    if s.moments.won.is_some() {
+        .child(board::result(s, &p, inner_w));
+    if s.moments.won.is_some() && !quiet {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
-    if let Some((t, _)) = boom {
+    if let Some((t, _)) = boom.filter(|_| !quiet) {
         console = console.child(effect(gfx::HEAT).key(format!("heat{}", s.field)).effect_data([t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
     // The shockwave reads a copy of the whole window, so it's mounted only around a blast
     // (at the root, outside any fading layer) and only for its 0.6 s, never left copying the
     // screen every frame.
     let origin = cx.layout("board").map(|r| [r[0], r[1]]).unwrap_or([0.0, 0.0]);
-    let shock = boom.filter(|_| !s.shock_done).map(|(st, sp)| {
+    let shock = boom.filter(|_| !s.shock_done && !quiet).map(|(st, sp)| {
         effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert()
     });
     let cheat = s.cheat.then(|| {
@@ -377,19 +351,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
 /// Builds with no right button to lean on (the web, which phones use) show the flag toggle.
 fn touch_first() -> bool {
     cfg!(target_arch = "wasm32")
-}
-
-/// The first time, a line of how to play under the console, until the first square opens.
-fn hint(s: &App, p: &Palette) -> Option<El> {
-    if s.saved.played || s.icon {
-        return None;
-    }
-    let (a, b) = if touch_first() {
-        ("Tap opens  ·  Flag, then tap, marks a mine", "Tap a number whose flags are placed to open around it")
-    } else {
-        ("Left click opens  ·  Right click flags", "Both buttons on a number open around it")
-    };
-    Some(col().items_center().gap(3.0).child(text(a).font(SMALL).color(p.text.alpha(0.8))).child(text(b).font(SMALL).color(p.muted)))
 }
 
 trait Pad {

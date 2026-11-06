@@ -28,6 +28,8 @@ pub const AURA: u32 = 9;
 pub const SELECT: u32 = 11;
 /// data: [t0, 0, 0, 0]: a red flash that cools.
 pub const HEAT: u32 = 12;
+/// The losing console cools completely, then lets the window sleep.
+const HEAT_FOR: f64 = 1.2;
 
 const COLORS: [u32; 8] = [0xffc531, 0x6aa8ff, 0xff3b4e, 0x4ade80, 0xffffff, 0xd8d8d8, 0xa78bfa, 0xff2d2d];
 
@@ -85,15 +87,24 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
         }
         SELECT => Fx::glow(GlowParams { style: GlowStyle::Neon, color: if d[1] > 0.5 { rgb(0xd0d0d0) } else { rgb(0x6aa8ff) }, intensity: d[0], radius: 7.0, occlusion: 0.0, ..Default::default() }),
         HEAT => {
-            let heat = (-(t - d[0]).max(0.0) / 0.9).exp();
-            if heat < 0.01 {
+            if (t - d[0]) as f64 >= HEAT_FOR {
                 return None;
             }
+            let heat = (-(t - d[0]).max(0.0) / 0.26).exp();
             Fx::glow(GlowParams { style: GlowStyle::Neon, color: if d[1] > 0.5 { rgb(0xc8c8c8) } else { rgb(0xff2d2d) }, radius: 26.0, intensity: 1.3, heat, ..Default::default() })
         }
         _ => return None,
     };
     Some(fx.on(shape).at(t))
+}
+
+// These envelopes are authored here rather than inside rune-fx's GlowParams. Keep sampling
+// them through their finite lifetime, including after the shockwave has finished.
+fn lighting_animating(s: &App, t: f64, reduced: bool) -> bool {
+    !reduced && s.spatial && (
+        s.moments.boom.is_some_and(|(at, _)| t < at + HEAT_FOR)
+        || s.moments.won.is_some_and(|at| t < at + 0.8)
+    )
 }
 
 #[derive(Default)]
@@ -129,7 +140,7 @@ impl Compositor<App> for Gfx {
             layers.push(l.reduced(reduced));
             slots.push(FxSlot::default().scale(k).clip(i.clip, i.fade));
         }
-        self.live = layers.iter().any(|l| l.is_animating());
+        self.live = layers.iter().any(|l| l.is_animating()) || lighting_animating(&f.rt.state, f.rt.t, reduced);
         let fx = self.fx.get_or_insert_with(|| FxRenderer::new(device, f.format, FxOptions { dither: true }));
         fx.set_srgb_blend(f.srgb_blend());
         fx.add_format(device, wgpu::TextureFormat::Rgba16Float);
@@ -149,5 +160,23 @@ impl Compositor<App> for Gfx {
                 EffectPhase::Draw(pass) => fx.draw_layer_in(pass, s.format, s.origin, k),
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::Saved;
+
+    #[test]
+    fn cooling_light_keeps_sampling_after_the_shock_then_sleeps() {
+        let mut a = App::with(Saved::default(), 7);
+        a.moments.boom = Some((0.0, [20.0, 20.0]));
+        assert!(lighting_animating(&a, 0.7, false));
+        assert!(!lighting_animating(&a, 1.3, false));
+        assert!(!lighting_animating(&a, 0.1, true));
+        a.spatial = false;
+        assert!(!lighting_animating(&a, 0.1, false));
+        assert!(layer(HEAT, [0.0; 4], Shape::rounded(0.0, 0.0, 100.0, 100.0, 12.0), [0.0; 2], 1.3).is_none());
     }
 }

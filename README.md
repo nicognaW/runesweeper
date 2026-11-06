@@ -27,17 +27,19 @@ Motion follows Emil Kowalski's rule of thumb: the more often you see something, 
 moves. Every animation here had to justify itself (the `remove-animations` skill), and most
 that couldn't were cut.
 
-- **Every click** (hundreds a game): the tile lifts off in 240 ms, rippling out from the click
-  over at most 300 ms. Numbers are there at once; nothing makes you wait to read them. The
-  selector sits on the square under the pointer, with no glide to lag behind it.
-- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2) never animate.
+- **Every click** (hundreds a game): numbers appear immediately. A 250 ms light wave travels
+  underneath them, with at most 300 ms of spread. Rapid reveals keep earlier waves finishing.
+  The exact selector stays on the square under the pointer; a separate soft light follows
+  with a 160 ms spring, without rebuilding the view.
+- **Flags**: a 150/120 ms enter/exit fade. **Keys** (arrows, Space, F, F2) never animate.
 - **A new field** from the face or the menu deals in from the centre in under half a second;
   from F2 it's simply there, old field gone in the same frame.
 - **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
-  out from the one you hit, then still.
+  out from the one you hit; the red console glow cools for 1.2 s, then rests.
 - **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
-  field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
-- The result banner straddles the field's edge, says how it went, and leaves after 3 s.
+  field, stars burst off the face and the console glows. Beat your best and the timer turns gold; the name prompt waits 800 ms so the win registers.
+- A reserved result line below the field says how it went and leaves after 3 s. It covers no cells
+  and moves nothing. The game assumes you know the rules: no tutorial or restart instructions.
 - Shaders do the backdrop, the liquid-metal rim, the plastic face, the LED glow, the blasts and
   the glow, and hold still when nothing is happening: an idle window draws nothing.
 - Entrances and exits use a strong ease-out; nothing grows from nothing. With Reduce Motion on,
@@ -51,9 +53,9 @@ RUNE_MOTION_GATE=gate.txt runesweeper --scene beginner --script scripts/play.jso
 RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: keys.json, won, first-run
 ```
 
-Every scenario reports nothing except the scripts that press F2 (`play.json`, `keys.json`), where
-the one-frame swap shows up as the old field's tiles leaving unanimated: a deliberate cut for a
-keyboard action.
+The interaction pass checks hover/flood, keyboard, win, loss, and reduced motion with no gate
+findings. Instant number changes, exact targeting, pointer teleports, and keyboard field swaps
+have authored motion intent. See the [comparison and evidence](docs/research/interaction-polish.md).
 
 Frame cost stays small: `cargo run --release --example bench` times Rune's work per frame on
 Expert (view, diff, layout, draw lists) at 0.4 ms median and 0.7 ms p95, even while a press is
@@ -116,7 +118,7 @@ Every Rune app renders without a window, which is how the pictures above were ma
 ```sh
 runesweeper --list-scenes
 runesweeper --snap expert.png --scene expert --size 868x598 --scale 2
-runesweeper --scene beginner --script scripts/play.json --video play.mp4
+runesweeper --scene beginner --script scripts/lighting.json --size 330x542 --video play.mp4
 ```
 
 ## Agent skills

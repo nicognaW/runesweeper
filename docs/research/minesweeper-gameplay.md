@@ -8,6 +8,8 @@ Repo citations are `src/<file>:<line>`. repnz citations are `game.c:<line>` and 
 
 > **Update:** fixed: #3 (a wrong chord opens the safe squares and reds every uncovered mine), #5 (Shift+left chords), #6 (the record box offers the current holder's name; blank stays blank; 32 characters), #7 (Marks off keeps ? marks), #9 (Shift alone toggles xyzzy; keys after the word are ignored; the pixel keeps its colour off the field), #10 (Custom opens with the current field), #11 (any first release on the field starts the clock). Open: #1, #2 and #4 need Rune to report the right button's press and window minimizing; #8 (Sound), #12 (one-click bug) and #13 (save on exit, window position) are left as they are.
 
+> **Interface update:** the Noir interaction pass removes the first-run hint and How to Play dialog, replaces the overlapping result banner with a reserved line, and delays the record prompt by 800 ms. The gameplay findings below describe the earlier interface; the rules fixes above remain in place.
+
 ## Verdict
 
 The rules match XP closely: cell states, the flag/?/blank cycle, ? cells that can be opened, flags that block opening, the flood fill, chording only when the flag count equals the number, what a loss and a win reveal, the counter, the timer starting at 1 and capping at 999, the best-time rules, the menus and F2. The real differences, most player-visible first:

@@ -9,6 +9,9 @@ pub mod storage;
 pub mod style;
 pub mod ui;
 
+#[cfg(test)]
+mod interaction_tests;
+
 use app::App;
 use game::Level;
 use rune::AppSpec;
@@ -36,7 +39,8 @@ fn play(a: &mut App, opens: &[(usize, usize)]) {
     a.seconds = 42;
 }
 
-const SCENES: &[(&str, fn(&mut App))] = &[
+type Scene = (&'static str, fn(&mut App));
+const SCENES: &[Scene] = &[
     ("beginner", |a| *a = scene(Level::Beginner, 7)),
     ("intermediate", |a| {
         *a = scene(Level::Intermediate, 11);
@@ -97,10 +101,6 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         play(a, &[(8, 8)]);
     }),
     // States for checking every screen by eye.
-    ("help-menu", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.menu = Some(app::Menu::Help);
-    }),
     ("record", |a| {
         *a = scene(Level::Beginner, 7);
         a.edit_name = rune::TextEdit::new("Anonymous");
@@ -109,10 +109,6 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     ("about", |a| {
         *a = scene(Level::Beginner, 7);
         a.dialog = Some(app::Dialog::About);
-    }),
-    ("howto", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.dialog = Some(app::Dialog::HowTo);
     }),
     ("press", |a| {
         *a = scene(Level::Intermediate, 11);
@@ -155,6 +151,14 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         SCENES.iter().find(|s| s.0 == "won").unwrap().1(a);
         a.saved.color = false;
     }),
+    ("reduced-lost", |a| {
+        SCENES.iter().find(|s| s.0 == "lost").unwrap().1(a);
+        a.reduced = true;
+    }),
+    ("reduced-won", |a| {
+        SCENES.iter().find(|s| s.0 == "won").unwrap().1(a);
+        a.reduced = true;
+    }),
     ("custom-max", |a| {
         let saved = Saved { level: Level::Custom, custom: (30, 24, 667), played: true, ..Saved::default() };
         *a = App::with(saved, 3);
@@ -177,8 +181,7 @@ fn initial_size() -> (f32, f32) {
     let saved = storage::load();
     let (w, h, _) = saved.level.dims().unwrap_or(saved.custom);
     let (ww, wh) = style::window_size(w, h);
-    // Room for the how-to-play lines under the console the first time.
-    (ww, if saved.played { wh } else { wh + 48.0 })
+    (ww, wh)
 }
 
 /// Effects off: `--plain` on desktop, `?plain` on the web (for GPUs that struggle).

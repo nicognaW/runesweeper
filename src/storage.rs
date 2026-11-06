@@ -8,7 +8,7 @@ pub struct Saved {
     pub custom: (usize, usize, usize),
     pub marks: bool,
     pub color: bool,
-    /// Set after the first square is ever opened: the first-run hint stops showing.
+    /// Kept when reading/writing earlier preference files; the UI no longer shows a tutorial.
     pub played: bool,
     /// Best times (seconds) and names for Beginner, Intermediate and Expert.
     pub best: [(u32, String); 3],
@@ -157,10 +157,7 @@ mod tests {
 
     #[test]
     fn settings_round_trip() {
-        let mut s = Saved::default();
-        s.level = Level::Expert;
-        s.custom = (20, 12, 50);
-        s.marks = false;
+        let mut s = Saved { level: Level::Expert, custom: (20, 12, 50), marks: false, ..Saved::default() };
         s.best[1] = (88, "Ada, again".into());
         let back = Saved::parse(&s.write());
         assert_eq!(back.level, Level::Expert);

@@ -12,7 +12,6 @@ use crate::style::{PITCH, WELL, window_size};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Menu {
     Game,
-    Help,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -22,7 +21,6 @@ pub enum Dialog {
     /// A new best time for this level index: ask for a name.
     Record(usize),
     About,
-    HowTo,
 }
 
 /// The board's pointer state, as the original tracks its buttons.
@@ -69,6 +67,16 @@ pub struct App {
     pub hover_at: Live<[f32; 2]>,
     pub hover_on: Live<f32>,
     pub hover_cell: Option<usize>,
+    /// A soft lamp follows the pointer; the exact cell outline stays immediate.
+    pub light_at: Live<[f32; 2]>,
+    pub light_on: Live<f32>,
+    pub light_ready: bool,
+    /// Keyboard moves change information immediately, without decorative waves.
+    pub spatial: bool,
+    /// Pointer-authored reveal turns keep their finite waves when another square opens.
+    pub reveal_turns: Vec<u32>,
+    /// Let the won field register before asking for a record name.
+    pub record_at: Option<(f64, usize)>,
     /// XYZZY, then Shift: the corner pixel tells mine from safe under the pointer.
     pub xyzzy: usize,
     pub cheat: bool,
@@ -119,6 +127,12 @@ impl App {
             hover_at: Live::new([0.0, 0.0]),
             hover_on: Live::new(0.0),
             hover_cell: None,
+            light_at: Live::new([0.0, 0.0]),
+            light_on: Live::new(0.0),
+            light_ready: false,
+            spatial: true,
+            reveal_turns: Vec::new(),
+            record_at: None,
             xyzzy: 0,
             cheat: false,
             pixel_safe: false,
@@ -162,6 +176,13 @@ impl App {
         self.banner_done = false;
         self.shock_done = false;
         self.moments = Moments::default();
+        self.record_at = None;
+        self.spatial = self.deal;
+        self.reveal_turns.clear();
+        self.hover_cell = None;
+        self.hover_on.snap(0.0);
+        self.light_on.snap(0.0);
+        self.light_ready = false;
     }
 
     pub fn set_level(&mut self, level: Level, tx: &mut Tx) {
@@ -220,9 +241,8 @@ impl App {
     fn release_at(&mut self, chord: bool, i: usize) {
         self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
-        if out != Outcome::Nothing && !self.saved.played {
-            self.saved.played = true;
-            storage::save(&self.saved);
+        if out != Outcome::Nothing && self.spatial {
+            self.reveal_turns.push(self.game.turn);
         }
         self.start_clock();
         match out {
@@ -245,7 +265,7 @@ impl App {
             self.new_best = true;
             // Windows offers the name already on the record, usually the player's own.
             self.edit_name = TextEdit::new(&self.saved.best[li].1);
-            self.dialog = Some(Dialog::Record(li));
+            self.record_at = Some((self.now + 0.8, li));
         }
     }
 
@@ -276,9 +296,9 @@ impl App {
     /// The dialog starts from the field being played, as Windows' does.
     pub fn open_custom(&mut self) {
         let (w, h, m) = self.dims();
-        self.edit_h = TextEdit::new(&h.to_string());
-        self.edit_w = TextEdit::new(&w.to_string());
-        self.edit_m = TextEdit::new(&m.to_string());
+        self.edit_h = TextEdit::new(h.to_string());
+        self.edit_w = TextEdit::new(w.to_string());
+        self.edit_m = TextEdit::new(m.to_string());
         self.dialog = Some(Dialog::Custom);
     }
 
@@ -297,6 +317,7 @@ impl App {
                 if self.game.over() {
                     return;
                 }
+                self.spatial = true;
                 match button {
                     rune::PointerButton::Middle => self.press.middle = true,
                     // Shift with the left button is a chord, as both buttons are.
@@ -311,6 +332,7 @@ impl App {
                 } else {
                     tx.live_only();
                 }
+                self.pointer_light(d.x, d.y);
                 self.hover(cell, tx);
             }
             rune::Phase::Up => {
@@ -320,6 +342,7 @@ impl App {
                 if any && !d.cancelled() {
                     self.release(chord, cell);
                 }
+                self.schedule(tx);
             }
         }
     }
@@ -328,6 +351,7 @@ impl App {
         if self.game.over() {
             return;
         }
+        self.spatial = true;
         if self.press.left {
             // Both buttons: the release will chord.
             self.press.right = true;
@@ -348,6 +372,8 @@ impl App {
             }
             None => {
                 self.hover_on.set(0.0);
+                self.light_on.set(0.0);
+                self.light_ready = false;
             }
         }
         if let Some(i) = cell {
@@ -361,38 +387,70 @@ impl App {
         }
     }
 
+    /// Retarget a render-clock spring, without rebuilding the board on pointer motion.
+    pub fn pointer_light(&mut self, x: f32, y: f32) {
+        let target = [x - 60.0, y - 60.0];
+        let previous = self.light_at.get();
+        // Entry and discrete pointer jumps should not sweep a lamp across the field.
+        if !self.light_ready || (target[0] - previous[0]).hypot(target[1] - previous[1]) > PITCH * 2.0 {
+            self.light_at.snap(target);
+        } else {
+            self.light_at.set(target);
+        }
+        self.light_ready = true;
+        self.light_on.set(if self.game.over() { 0.0 } else { 1.0 });
+    }
+
     /// When the result banner leaves after the game ends.
     pub const BANNER_FOR: f64 = 3.0;
 
-    pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
-        self.now = now;
+    fn schedule(&self, tx: &mut Tx) {
+        let now = self.now;
+        let mut next = f64::INFINITY;
         if let Some((t, _)) = self.moments.boom.filter(|_| !self.shock_done) {
-            if now - t >= crate::gfx::SHOCK_FOR {
-                self.shock_done = true;
-                return true;
-            }
-            tx.wake_after(Duration::from_secs_f64((t + crate::gfx::SHOCK_FOR - now).max(0.01)));
+            next = next.min(t + crate::gfx::SHOCK_FOR);
         }
         let ended = self.moments.won.or(self.moments.boom.map(|(t, _)| t));
         if let Some(t) = ended.filter(|_| !self.banner_done) {
-            if now - t >= Self::BANNER_FOR {
-                self.banner_done = true;
-                return true;
+            next = next.min(t + Self::BANNER_FOR);
+        }
+        if let Some((t, _)) = self.record_at.filter(|_| self.dialog.is_none()) {
+            next = next.min(t);
+        }
+        if let Some(t0) = self.started_at.filter(|_| self.game.status == Status::Playing && self.seconds < 999) {
+            next = next.min(t0 + (now - t0).floor() + 1.0);
+        }
+        if next.is_finite() {
+            tx.wake_after(Duration::from_secs_f64((next - now).max(0.01)));
+        }
+    }
+
+    pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
+        self.now = now;
+        let mut changed = false;
+        if self.moments.boom.is_some_and(|(t, _)| !self.shock_done && now - t >= crate::gfx::SHOCK_FOR) {
+            self.shock_done = true;
+            changed = true;
+        }
+        if self.moments.won.or(self.moments.boom.map(|(t, _)| t)).is_some_and(|t| !self.banner_done && now - t >= Self::BANNER_FOR) {
+            self.banner_done = true;
+            changed = true;
+        }
+        if let Some((_, li)) = self.record_at.filter(|(at, _)| now >= *at && self.dialog.is_none()) {
+            self.record_at = None;
+            if self.game.status == Status::Won {
+                self.menu = None;
+                self.dialog = Some(Dialog::Record(li));
             }
-            tx.wake_after(Duration::from_secs_f64((t + Self::BANNER_FOR - now).max(0.01)));
+            changed = true;
         }
-        let Some(t0) = self.started_at else { return false };
-        if self.game.status != Status::Playing {
-            return false;
-        }
-        let secs = ((now - t0) as u32 + 1).min(999);
-        let next = 1.0 - (now - t0).fract();
-        tx.wake_after(Duration::from_secs_f64(next.max(0.01)));
-        if secs != self.seconds {
+        if let Some(t0) = self.started_at.filter(|_| self.game.status == Status::Playing) {
+            let secs = ((now - t0) as u32 + 1).min(999);
+            changed |= secs != self.seconds;
             self.seconds = secs;
-            return true;
         }
-        false
+        self.schedule(tx);
+        changed
     }
 
     /// Arrow keys move the selector a square at a time, at once (keys never animate).
@@ -401,6 +459,10 @@ impl App {
         let i = self.hover_cell.unwrap_or(self.game.idx(self.game.w / 2, self.game.h / 2));
         let (x, y) = ((i as isize % w + dx).clamp(0, w - 1), (i as isize / w + dy).clamp(0, h - 1));
         self.hover(Some((y * w + x) as usize), tx);
+        self.hover_at.snap(self.hover_at.get());
+        self.hover_on.snap(self.hover_on.get());
+        self.light_on.snap(0.0);
+        self.light_ready = false;
     }
 
     pub fn key(&mut self, e: &KeyEvent, tx: &mut Tx) -> bool {
@@ -426,12 +488,21 @@ impl App {
             Key::Text(t) if plain && t == " " && self.hover_cell.is_some() => {
                 let i = self.hover_cell.unwrap();
                 let chord = self.game.cells[i].cover == Cover::Open;
+                self.spatial = false;
+                self.reveal_turns.clear();
                 self.release(chord, Some(i));
+                self.schedule(tx);
+                tx.instant();
+                tx.settle();
                 true
             }
             Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() => {
                 let i = self.hover_cell.unwrap();
+                self.spatial = false;
+                self.reveal_turns.clear();
                 self.game.mark(i, self.saved.marks);
+                tx.instant();
+                tx.settle();
                 true
             }
             Key::Function(2) => {
