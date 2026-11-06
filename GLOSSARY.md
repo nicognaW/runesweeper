@@ -62,3 +62,7 @@ _Avoid_: Score, entry
 **History**:
 All game records, kept without limit.
 _Avoid_: Best times, high scores, stats
+
+**Review**:
+After a game, a walk through its moves that points out missed deductions, needless guesses and lost efficiency.
+_Avoid_: Analysis, replay, post-mortem
