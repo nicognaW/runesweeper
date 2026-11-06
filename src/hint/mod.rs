@@ -261,10 +261,15 @@ impl Hint {
     }
 }
 
-/// The hint for `game` as the player sees it, the last move at `last`.
+/// The player's flags on `game`, as [`find`] and [`advise`] take them.
+fn flags(game: &Game) -> Vec<bool> {
+    game.cells.iter().map(|c| c.cover == Cover::Flag).collect()
+}
+
+/// The hint for `game` as the player sees it, the last move at `last` (tests).
+#[cfg(test)]
 pub fn of(game: &Game, last: Option<usize>) -> Hint {
-    let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
-    find(&View::of(game), &flags, last)
+    find(&View::of(game), &flags(game), last)
 }
 
 /// What a hint knows of the field beyond what the player sees.
@@ -279,8 +284,7 @@ pub struct Field<'a> {
 /// The hint for `game` as the player sees it, the last move at `last`, with the guess tier
 /// when no cell can be proven.
 pub fn advise_game(game: &Game, last: Option<usize>, field: &Field) -> Hint {
-    let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
-    advise(&View::of(game), &flags, last, field)
+    advise(&View::of(game), &flags(game), last, field)
 }
 
 /// [`find`], or when it finds nothing and no cell can be proven, how to choose a guess.
