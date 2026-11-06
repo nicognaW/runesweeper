@@ -77,6 +77,9 @@ pub struct App {
     /// When the band of light over the hidden tiles started, 600 ms into a generation that is
     /// still running (on the poll clock).
     pub sweep_from: Option<f64>,
+    /// History's record `.0`, whose review waits for its field, laid again off the UI thread:
+    /// the record keeps only its seed and first click. The face thinks meanwhile.
+    pub review_laying: Option<(usize, Generating)>,
     /// What lays the new modes' fields: [`generate::lay`] (tests slow it down).
     pub lay: Lay,
     /// Wakes the window when a field lands (from `AppSpec::setup`; none headless).
@@ -177,6 +180,7 @@ impl App {
             unlaid: false,
             clock_waits: false,
             generating: None,
+            review_laying: None,
             fifty_fifties: Vec::new(),
             generating_since: None,
             sweep_from: None,
@@ -300,7 +304,9 @@ impl App {
             self.fifty_fifties = play::walk(&g, first).fifty_fifties;
         }
         self.game = g;
-        self.record.layout = Layout::Seeded { seed: self.seed, first };
+        // The mines as laid, so a review of it never lays the field again.
+        let laid = (0..self.game.cells.len()).filter(|&i| self.game.cells[i].mine).collect();
+        self.record.layout = Layout::Seeded { seed: self.seed, first, laid: Some(laid) };
         // The record's clock, like the timer, starts with the field: generating never counts.
         self.record_t0 = Some(self.now);
         self.unlaid = false;
@@ -339,6 +345,7 @@ impl App {
         self.abandon();
         self.hint = None;
         self.review = None;
+        self.review_laying = None;
         self.lay_new_field();
         self.field += 1;
         self.started_at = None;
@@ -373,7 +380,7 @@ impl App {
     }
 
     pub fn mood(&self) -> Mood {
-        if self.generating.is_some() && self.review.is_none() {
+        if (self.generating.is_some() && self.review.is_none()) || self.review_laying.is_some() {
             return Mood::Think;
         }
         match self.shown().status {
@@ -418,8 +425,7 @@ impl App {
 
     /// A right click on cell `i`.
     pub fn mark_at(&mut self, i: usize) {
-        // A field being generated takes no input, nor one waiting out a review.
-        if self.game.over() || self.generating.is_some() || self.review.is_some() {
+        if self.game.over() || self.waits() {
             return;
         }
         self.note(Act::Mark { marks: self.saved.marks }, i);
@@ -487,11 +493,15 @@ impl App {
         }
     }
 
+    /// A field being generated takes no input, nor one under a review or waiting for one.
+    pub(crate) fn waits(&self) -> bool {
+        self.generating.is_some() || self.review.is_some() || self.review_laying.is_some()
+    }
+
     /// A release on the board.
     fn release(&mut self, chord: bool, cell: Option<usize>) {
         let Some(i) = cell else { return };
-        // A field being generated takes no input, nor one waiting out a review.
-        if self.generating.is_some() || self.review.is_some() {
+        if self.waits() {
             return;
         }
         if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
@@ -678,6 +688,9 @@ impl App {
         if self.generating.is_some() && self.poll_generation(tx) {
             return true;
         }
+        if self.review_laying.is_some() && self.poll_review_laying(tx) {
+            return true;
+        }
         if let Some((t, _)) = self.moments.boom.filter(|_| !self.shock_done) {
             if now - t >= crate::gfx::SHOCK_FOR {
                 self.shock_done = true;
@@ -746,6 +759,24 @@ impl App {
             return true;
         }
         false
+    }
+
+    /// A review's field being laid: opens the review once it lands (true).
+    fn poll_review_laying(&mut self, tx: &mut Tx) -> bool {
+        let Some((i, job)) = &mut self.review_laying else { return false };
+        let Some(base) = job.take() else {
+            // Without a waker nothing says when it lands: look a few times a second.
+            if self.waker.is_none() {
+                tx.wake_after(Duration::from_secs_f64(1.0 / 30.0));
+            }
+            return false;
+        };
+        let i = *i;
+        self.review_laying = None;
+        if let Some(r) = self.history.get(i) {
+            self.review = Some(Review::of(r, base));
+        }
+        true
     }
 
     /// Arrow keys move the selector a square at a time, at once (keys never animate).

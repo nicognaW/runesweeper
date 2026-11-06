@@ -287,7 +287,7 @@ fn forced_guess_markers_are_the_forced_guesses_history_counts() {
             }
         }
         let r = a.history.last().unwrap().clone();
-        let review = crate::review::Review::of(&r);
+        let review = crate::review::Review::of(&r, r.base().expect("its mines"));
         let forced = review.markers.iter().filter(|m| matches!(m.kind, crate::review::Kind::Forced { .. })).count();
         assert_eq!(forced as u32, r.forced, "seed {seed}");
         assert_eq!(review.stats.three_bv, r.three_bv, "seed {seed}");

@@ -91,9 +91,9 @@ pub struct Review {
 }
 
 impl Review {
-    /// A review of `record`, its field laid again from the record.
-    pub fn of(record: &Record) -> Review {
-        let base = record.base();
+    /// A review of `record` on `base`, its field as laid ([`Record::base`], or laid again
+    /// off the UI thread); a Max Guess field's true 50/50s are found again from it.
+    pub fn of(record: &Record, base: Game) -> Review {
         let announced = match record.layout {
             Layout::Seeded { first, .. } if record.mode == Mode::MaxGuess => play::walk(&base, first).fifty_fifties,
             _ => Vec::new(),

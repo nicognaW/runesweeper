@@ -144,7 +144,7 @@ fn the_move_list_rebuilds_the_same_final_field() {
         let r = last(&a).clone();
         assert!(r.moves.iter().any(|m| m.act == Act::Chord) && r.moves.iter().any(|m| matches!(m.act, Act::Mark { .. })));
         let back = Record::parse(&r.write()).expect("the record reads back");
-        let field = back.replay();
+        let field = back.replay().expect("its mines are kept");
         let covers = |g: &Game| g.cells.iter().map(|c| (c.mine, c.cover)).collect::<Vec<_>>();
         assert_eq!(covers(&field), covers(&end), "{mode:?}");
         assert_eq!(field.status, end.status, "{mode:?}");

@@ -8,6 +8,7 @@ use rune::{El, Phase, col, el, row, spacer, text};
 use crate::app::App;
 use crate::callout::{self, line, ring};
 use crate::game::Game;
+use crate::generating::Generating;
 use crate::hint::words;
 use crate::record::Layout;
 use crate::review::{Kind, Marker, Review};
@@ -16,11 +17,23 @@ use crate::style::*;
 use crate::toolbar::well;
 
 impl App {
-    /// Reviews History's record `i`, its field laid again from the record.
+    /// Reviews History's record `i` on the mines it keeps. One that kept only its seed and
+    /// first click has its field laid again off the UI thread, and the review opens when it
+    /// lands ([`App::tick`]); the window never waits for it.
     pub fn open_review(&mut self, i: usize) {
         let Some(r) = self.history.get(i) else { return };
-        self.review = Some(Review::of(r));
         self.panel = None;
+        match (r.base(), &r.layout) {
+            (Some(base), _) => {
+                self.review_laying = None;
+                self.review = Some(Review::of(r, base));
+            }
+            (None, &Layout::Seeded { seed, first, .. }) => {
+                self.review = None;
+                self.review_laying = Some((i, Generating::start(self.lay, r.mode, r.dims, seed, first, self.waker.clone())));
+            }
+            (None, Layout::Mines(_)) => {}
+        }
     }
 
     /// Reviews the game just played: its record is History's last, its field the one in
@@ -29,7 +42,7 @@ impl App {
         let Some(r) = self.history.last().filter(|_| self.game.over()) else { return };
         let base = match r.layout {
             Layout::Seeded { .. } => Game::with_mines(self.game.w, self.game.h, &(0..self.game.cells.len()).filter(|&i| self.game.cells[i].mine).collect::<Vec<_>>()),
-            Layout::Mines(_) => r.base(),
+            Layout::Mines(_) => r.base().expect("Classic keeps its mines"),
         };
         self.review = Some(Review::on(r, base, self.fifty_fifties.clone()));
         self.panel = None;
@@ -37,6 +50,7 @@ impl App {
 
     pub fn leave_review(&mut self) {
         self.review = None;
+        self.review_laying = None;
     }
 
     /// `d` moves forward (or back) in the review.
