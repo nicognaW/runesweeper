@@ -5,6 +5,7 @@ pub mod board;
 pub mod game;
 pub mod gfx;
 pub mod icons;
+pub mod solver;
 pub mod storage;
 pub mod style;
 pub mod ui;
