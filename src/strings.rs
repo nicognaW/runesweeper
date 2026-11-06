@@ -67,6 +67,7 @@ macro_rules! strings {
 strings! {
     // Modes.
     Classic: "Classic", "原版";
+    GentleNoGuess: "Gentle No Guess", "简单无猜";
     NoGuess: "No Guess", "无猜";
     // Levels.
     Beginner: "Beginner", "初级";
@@ -116,6 +117,7 @@ impl S {
     pub fn mode(m: Mode) -> S {
         match m {
             Mode::Classic => S::Classic,
+            Mode::GentleNoGuess => S::GentleNoGuess,
             Mode::NoGuess => S::NoGuess,
         }
     }
@@ -158,6 +160,7 @@ mod tests {
         let zh = |k: S| k.get(Lang::ZhCn);
         assert_eq!([zh(S::Beginner), zh(S::Intermediate), zh(S::Expert), zh(S::Custom)], ["初级", "中级", "高级", "自定义"]);
         assert_eq!([zh(S::Classic), zh(S::NoGuess)], ["原版", "无猜"]);
+        assert_eq!(zh(S::GentleNoGuess), "简单无猜");
         assert!(zh(S::WonIn).contains("胜利") && zh(S::Lost).contains("失败"));
         assert!(zh(S::MinesLeft).contains("剩余雷数"));
         assert_eq!(zh(S::NewGame), "新游戏");
