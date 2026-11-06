@@ -34,6 +34,8 @@ mod record_tests;
 mod hint_tests;
 #[cfg(test)]
 mod generating_tests;
+#[cfg(test)]
+mod max_guess_tests;
 
 use app::App;
 use game::Level;
@@ -102,6 +104,20 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         *a = App::with(saved, 5);
         a.open_at(a.game.idx(15, 8));
         a.finish_laying();
+    }),
+    ("max-guess", |a| {
+        let saved = Saved { mode: game::Mode::MaxGuess, level: Level::Intermediate, ..Saved::default() };
+        *a = App::with(saved, 5);
+        a.open_at(a.game.idx(8, 8));
+        a.finish_laying();
+    }),
+    // Max Guess lost on a true 50/50: the banner says it was forced.
+    ("max-guess-forced", |a| {
+        SCENES.iter().find(|s| s.0 == "max-guess").unwrap().1(a);
+        if let Some(&(x, y)) = a.fifty_fifties.first() {
+            let _ = a.open_at(if a.game.cells[x].mine { x } else { y });
+            a.moments.boom = Some((0.05, a.cell_center(a.game.hit.unwrap_or(x))));
+        }
     }),
     // A field that takes its time: the face thinks, and after 600 ms the light sweeps. It is
     // held for an hour, so it never lands while you look.

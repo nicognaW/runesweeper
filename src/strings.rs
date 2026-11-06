@@ -69,6 +69,7 @@ strings! {
     Classic: "Classic", "原版";
     GentleNoGuess: "Gentle No Guess", "简单无猜";
     NoGuess: "No Guess", "无猜";
+    MaxGuess: "Max Guess", "死猜挑战";
     // Levels.
     Beginner: "Beginner", "初级";
     Intermediate: "Intermediate", "中级";
@@ -86,6 +87,10 @@ strings! {
     WonAgain: "F2 or the face for another", "按 F2 或笑脸再来一局";
     Lost: "Boom.", "失败";
     LostAgain: "F2 or the face to try again", "按 F2 或笑脸重新开始";
+    // Max Guess: the true 50/50s the field forces, before play and on the result banner.
+    FiftyCount: "Forced 50/50s: {}", "死猜：{} 处";
+    FiftySurvived: "Forced 50/50s survived: {} of {}", "闯过死猜：{} / {} 处";
+    LostForced: "A forced 50/50 · survived {} of {}", "死猜，并非失误 · 闯过 {} / {} 处";
     // The toolbar and its panels.
     FlagMode: "Flag mode", "标雷模式";
     Settings: "Settings", "设置";
@@ -206,6 +211,7 @@ impl S {
             Mode::Classic => S::Classic,
             Mode::GentleNoGuess => S::GentleNoGuess,
             Mode::NoGuess => S::NoGuess,
+            Mode::MaxGuess => S::MaxGuess,
         }
     }
 

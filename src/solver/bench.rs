@@ -85,11 +85,7 @@ impl Generation {
     }
     /// The generation time `q` of the way up (0.5 the median), by the nearest rank.
     pub fn percentile(&self, q: f64) -> Duration {
-        let n = self.times.len();
-        if n == 0 {
-            return Duration::ZERO;
-        }
-        self.times[((q * n as f64).ceil() as usize).clamp(1, n) - 1]
+        nearest_rank(&self.times, q)
     }
 }
 
@@ -117,6 +113,84 @@ pub fn generation(mode: Mode, (w, h, mines): (usize, usize, usize), fields: u64,
         if played.won && played.guesses == 0 {
             t.clean_wins += 1;
         }
+    }
+    t.times.sort();
+    t
+}
+
+/// The time `q` of the way up ascending `times` (0.5 the median), by the nearest rank.
+fn nearest_rank(times: &[Duration], q: f64) -> Duration {
+    let n = times.len();
+    if n == 0 {
+        return Duration::ZERO;
+    }
+    times[((q * n as f64).ceil() as usize).clamp(1, n) - 1]
+}
+
+/// Max Guess fields as solver stress tests: how many true 50/50s generation forced, how the
+/// bot did against the odds perfect play has on them, and what generation cost.
+#[derive(Clone, Debug, Default)]
+pub struct Stress {
+    pub fields: u64,
+    /// True 50/50s over all fields, and the most on one field.
+    pub fifty_fifties: u64,
+    pub most: usize,
+    /// Fields the bot won, and the wins perfect play expects: the sum over fields of 0.5^k.
+    pub wins: u64,
+    pub expected_wins: f64,
+    /// Fields generation left with no true 50/50 at all.
+    pub none: u64,
+    /// Search steps taken, all fields.
+    pub steps: u64,
+    /// Time the bot spent playing the fields.
+    pub play_time: Duration,
+    /// Time to generate each field, ascending.
+    pub times: Vec<Duration>,
+}
+
+impl Stress {
+    pub fn fifty_fifties_per_field(&self) -> f64 {
+        self.fifty_fifties as f64 / self.fields.max(1) as f64
+    }
+    pub fn win_rate(&self) -> f64 {
+        self.wins as f64 / self.fields.max(1) as f64
+    }
+    /// Perfect play's win rate: the mean of 0.5^k.
+    pub fn expected_rate(&self) -> f64 {
+        self.expected_wins / self.fields.max(1) as f64
+    }
+    pub fn ms_per_game(&self) -> f64 {
+        self.play_time.as_secs_f64() * 1000.0 / self.fields.max(1) as f64
+    }
+    pub fn percentile(&self, q: f64) -> Duration {
+        nearest_rank(&self.times, q)
+    }
+}
+
+/// Generates `fields` Max Guess fields of `(columns, rows, mines)` with `budget` search steps
+/// each (the game's own budget if `None`), each one's seed and first click drawn in turn from
+/// `seed` as for [`generation`]. The bot then plays each field once.
+pub fn max_guess((w, h, mines): (usize, usize, usize), fields: u64, seed: u64, budget: Option<u32>) -> Stress {
+    let mut t = Stress::default();
+    let mut draw = Stream::new(seed);
+    let budget = budget.unwrap_or(generate::budget((w, h, mines)));
+    for _ in 0..fields {
+        let (field_seed, first) = (draw.next_u64(), draw.below(w * h));
+        let start = Instant::now();
+        let laid = generate::searched((w, h, mines), field_seed, first, budget);
+        t.times.push(start.elapsed());
+        let k = laid.fifty_fifties.len();
+        t.fields += 1;
+        t.fifty_fifties += k as u64;
+        t.most = t.most.max(k);
+        t.none += (k == 0) as u64;
+        t.expected_wins += 0.5f64.powi(k as i32);
+        t.steps += laid.steps as u64;
+        let mut g = laid.game;
+        let start = Instant::now();
+        let played = play::play(&mut g, first);
+        t.play_time += start.elapsed();
+        t.wins += played.won as u64;
     }
     t.times.sort();
     t

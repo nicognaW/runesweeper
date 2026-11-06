@@ -17,7 +17,7 @@ Chosen independently of the Level (Beginner, Intermediate, Expert, Custom). Chan
 
 - The three new modes lay mines only after the first click, keep the 3×3 around it clear (the first click is always an opening), and use their own random generator: a field is fully defined by (mode, level, seed, first click).
 - Gentle No Guess and No Guess redraw uniform random fields until the solver can finish one, with no time limit. No mine-moving repair, so accepted fields are a uniform draw over solvable fields.
-- Max Guess searches from a random field, with the solver in the loop, for the most true 50/50s within its time budget. The count is shown before play; the end banner says how many were survived and whether a loss was forced. No undo.
+- Max Guess searches from a random field, with the solver in the loop, for the most true 50/50s within a fixed number of search steps per level (steps, not time, so the field stays determined by its inputs). The count is shown before play; the end banner says how many were survived and whether a loss was forced. No undo.
 - Generation runs off the UI thread. On the first click the face shows a thinking state and the field takes no input; after 600 ms a slow band of light sweeps the hidden tiles until the field is ready. The timer starts when the field is ready. F2 or the face cancels. Seconds of generation are acceptable; the budget is not fixed yet.
 - The mine counter stays mines minus flags.
 

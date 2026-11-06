@@ -113,12 +113,36 @@ fields and seed) takes:
 | Intermediate | 0.53 ms | 2.1 ms | 0.60 ms | 2.6 ms |
 | Expert | 7.2 ms | 43 ms | 7.5 ms | 46 ms |
 
+Max Guess searches instead of redrawing. From the uniform field No Guess would draw first, it
+moves one mine at a time and walks the field as a perfect, lucky player: every proof, and at
+each stall a true 50/50, opening its safe cell. A true 50/50 is two cells that hold one mine in
+every arrangement the numbers and the mine count allow, where every other cell that is or may
+become a number touches both or neither. A move stays when the walk does no worse: a finished
+field beats one that stalls on a lopsided guess, then more true 50/50s win, then more ground
+opened. The best finished field after a fixed number of steps is used (Beginner 2,000,
+Intermediate 1,500, Expert 1,000; Custom in proportion to its cells), so a field is the same on
+every machine. Each pair's mine then goes to either cell on a coin flip, so neither cell of a
+pair is the safer one. As solver stress tests, over 1,000 fields per level (seed 1, the bot
+playing each once):
+
+| Level | True 50/50s per field (most) | Bot wins (95% Wilson) | Perfect play, mean 0.5^k | Bot time per game | Generation p50 | p99 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Beginner | 3.41 (4) | 9.4% (7.7–11.4%) | 10.2% | 0.06 ms | 91 ms | 123 ms |
+| Intermediate | 7.88 (15) | 1.3% (0.8–2.2%) | 1.2% | 0.36 ms | 420 ms | 725 ms |
+| Expert | 10.24 (19) | 0.4% (0.2–1.0%) | 0.5% | 1.6 ms | 807 ms | 1.36 s |
+
+The bot wins as often as perfect play can: every guess it is forced into is a coin flip.
+On wasm (Node's V8, the release wasm through `wasm-bindgen`, 100 fields per level, seed 1)
+generation takes p50 107 ms / p99 153 ms on Beginner, 467 / 826 ms on Intermediate and
+983 ms / 1.49 s on Expert: past 600 ms the sweep shows it is working.
+
 ```sh
-cargo run --release --example solver -- 10000 1 1000   # Classic games per level, seed, fields per mode
+cargo run --release --example solver -- 10000 1 1000 1000   # Classic games per level, seed, fields per mode, Max Guess fields
 ```
 
 It prints the same columns for Beginner and Intermediate; the same seed gives the same numbers.
-`scripts/web-build.sh && node scripts/wasm-bench.mjs dist/web 1000 1` measures the wasm.
+`scripts/web-build.sh && node scripts/wasm-bench.mjs dist/web 1000 1` measures the wasm
+(a fourth argument, such as `max-guess`, picks the modes).
 
 ## Download
 
@@ -145,7 +169,7 @@ The same game as Windows Minesweeper:
 - A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
-- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. It is generated off the UI thread (a thread on desktop, a web worker in the browser), so the window never freezes; F2 or the face cancels it for a fresh field. The timer starts once the field is ready. **Gentle No Guess** (简单无猜) works the same, but only keeps fields that one number, or two overlapping numbers, at a time can finish, with the mine count near the end: pattern play always wins.
+- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. It is generated off the UI thread (a thread on desktop, a web worker in the browser), so the window never freezes; F2 or the face cancels it for a fresh field. The timer starts once the field is ready. **Gentle No Guess** (简单无猜) works the same, but only keeps fields that one number, or two overlapping numbers, at a time can finish, with the mine count near the end: pattern play always wins. **Max Guess** (死猜挑战) lays its field the same way, then searches for one that forces a perfect player into as many **true 50/50s** as it can: two cells holding one mine that no number, now or later, can ever tell apart. Everything between them is logic. Once your first click has laid the field, a tab on the console's top edge shows how many it holds; the result banner says how many you got through and, when you lost on one, that it was forced. There is no undo.
 - **Toolbar**: the chip on the left shows the Mode and Level and opens the picker: a row for the Mode, then Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
 - **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Chinese is drawn in Xiaomi's MiSans and Latin letters and digits in Inter, both built in, so Chinese shows on any machine and in the browser.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
