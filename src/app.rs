@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use rune::{Key, KeyEvent, Live, TextEdit, Tx};
 
-use crate::game::{Cover, Game, Level, Outcome, Status, clamp_custom};
+use crate::game::{Cover, Game, Level, Outcome, Rng, Status, clamp_custom};
 use crate::icons::Mood;
 use crate::storage::{self, Saved};
 use crate::style::{PITCH, WELL, window_size};
@@ -96,11 +96,11 @@ impl App {
         Self::with(saved, storage::seed())
     }
 
-    pub fn with(saved: Saved, seed: u64) -> App {
+    pub fn with(saved: Saved, seed: u32) -> App {
         let level = saved.level;
         let (w, h, m) = level.dims().unwrap_or(saved.custom);
         App {
-            game: Game::new(w, h, m, seed),
+            game: Game::new(w, h, m, Rng::new(seed)),
             level,
             saved,
             field: 0,
@@ -148,7 +148,8 @@ impl App {
 
     fn fresh_field(&mut self) {
         let (w, h, m) = self.dims();
-        self.game = Game::new(w, h, m, storage::seed() ^ self.field as u64);
+        // One stream for the whole session, as Windows seeds once at startup.
+        self.game = Game::new(w, h, m, self.game.rng);
         self.field += 1;
         self.started_at = None;
         self.seconds = 0;

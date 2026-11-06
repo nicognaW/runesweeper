@@ -138,17 +138,16 @@ pub fn save(s: &Saved) {
     }
 }
 
-/// A seed for a new field.
-pub fn seed() -> u64 {
+/// The session's seed: a millisecond count, as Windows uses `GetTickCount()`.
+pub fn seed() -> u32 {
     #[cfg(target_arch = "wasm32")]
     {
-        (js_sys::Math::random() * u64::MAX as f64) as u64 ^ (js_sys::Date::now() as u64)
+        js_sys::Date::now() as u64 as u32
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         use std::time::{SystemTime, UNIX_EPOCH};
-        let n = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
-        n ^ (std::process::id() as u64).rotate_left(32)
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u32).unwrap_or(0)
     }
 }
 

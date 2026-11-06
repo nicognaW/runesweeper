@@ -81,7 +81,8 @@ The same game as Windows Minesweeper:
 - **Keyboard**: arrows move the selector, Space opens (or chords on a number), F flags, F2 starts again.
 - **Touch** (the web build): the *Flag* button in the menu bar makes taps place flags; a tap on a number chords.
 - **Chord**: on a number whose flags are all placed, press both buttons (or the middle one) to open its other neighbours. A wrong flag loses.
-- The first click is never a mine: one that was there moves to the top-left-most free square.
+- Mines come from the Microsoft C runtime's `rand()`, seeded once per session from a millisecond clock, as `srand(GetTickCount())`: a column, then a row, each `rand() % n`, redrawn while the square already holds a mine.
+- A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
 - **Game** menu: New (F2), Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99), Custom (9–24 × 9–30, up to (h−1)(w−1) mines), Marks, Color, Best Times, Exit.

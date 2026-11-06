@@ -97,11 +97,12 @@ pub struct Game {
     pub opened: usize,
     pub flags: usize,
     pub turn: u32,
-    rng: Rng,
+    /// The generator after this field was laid; the next field continues from it.
+    pub rng: Rng,
 }
 
 impl Game {
-    pub fn new(w: usize, h: usize, mines: usize, seed: u64) -> Game {
+    pub fn new(w: usize, h: usize, mines: usize, rng: Rng) -> Game {
         let mut g = Game {
             w,
             h,
@@ -113,17 +114,20 @@ impl Game {
             opened: 0,
             flags: 0,
             turn: 0,
-            rng: Rng(seed | 1),
+            rng,
         };
         g.lay_mines();
         g
     }
 
-    /// Mines are laid when the field is made, as the original does.
+    /// Mines are laid when the field is made, as the original does: a column, then a
+    /// row, each `rand() % n`, drawn again while the square already holds a mine.
     fn lay_mines(&mut self) {
         let mut placed = 0;
         while placed < self.mines {
-            let i = (self.rng.next() % (self.w * self.h) as u64) as usize;
+            let x = self.rng.below(self.w);
+            let y = self.rng.below(self.h);
+            let i = self.idx(x, y);
             if !self.cells[i].mine {
                 self.cells[i].mine = true;
                 placed += 1;
@@ -169,16 +173,19 @@ impl Game {
             return Outcome::Nothing;
         }
         if !self.started {
-            self.started = true;
             self.status = Status::Playing;
             if self.cells[i].mine {
-                // The first click is never a mine: Windows moves it to the top-left-most
-                // free square.
+                // A first click on a mine moves it to the first free square, row by row from
+                // the top left. Windows' scan stops short of the last row and the last
+                // column; when that area is all mines nothing moves, nothing opens, and the
+                // next click is still a first click.
+                let free = (0..self.h - 1).flat_map(|y| (0..self.w - 1).map(move |x| (x, y))).map(|(x, y)| self.idx(x, y)).find(|&j| !self.cells[j].mine);
+                let Some(free) = free else { return Outcome::Nothing };
                 self.cells[i].mine = false;
-                let free = (0..self.cells.len()).find(|&j| j != i && !self.cells[j].mine).unwrap();
                 self.cells[free].mine = true;
                 self.count();
             }
+            self.started = true;
         }
         self.turn += 1;
         if self.cells[i].mine {
@@ -297,17 +304,24 @@ impl Game {
     }
 }
 
-/// splitmix64: small, seedable, the same on every platform.
-#[derive(Clone, Copy)]
-struct Rng(u64);
+/// The Microsoft C runtime's `rand()`, which Windows Minesweeper uses: seeded once with
+/// `srand(GetTickCount())`, then one stream for every field.
+#[derive(Clone, Copy, Debug)]
+pub struct Rng(u32);
 
 impl Rng {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
+    /// `srand(seed)`.
+    pub fn new(seed: u32) -> Rng {
+        Rng(seed)
+    }
+    /// `rand()`: 0..=0x7FFF.
+    fn rand(&mut self) -> u32 {
+        self.0 = self.0.wrapping_mul(214_013).wrapping_add(2_531_011);
+        (self.0 >> 16) & 0x7FFF
+    }
+    /// `rand() % n`, bias and all.
+    fn below(&mut self, n: usize) -> usize {
+        self.rand() as usize % n
     }
 }
 
@@ -318,7 +332,7 @@ mod tests {
     fn field(rows: &[&str]) -> Game {
         let h = rows.len();
         let w = rows[0].len();
-        let mut g = Game::new(w, h, 1, 7);
+        let mut g = Game::new(w, h, 1, Rng::new(7));
         for c in &mut g.cells {
             c.mine = false;
         }
@@ -340,7 +354,7 @@ mod tests {
     fn levels_lay_their_mines() {
         for l in [Level::Beginner, Level::Intermediate, Level::Expert] {
             let (w, h, m) = l.dims().unwrap();
-            let g = Game::new(w, h, m, 42);
+            let g = Game::new(w, h, m, Rng::new(42));
             assert_eq!(g.cells.iter().filter(|c| c.mine).count(), m);
         }
     }
@@ -352,6 +366,39 @@ mod tests {
         assert!(!g.cells[4].mine);
         assert!(g.cells[0].mine, "the mine moved to the first free square");
         assert_eq!(g.status, Status::Playing);
+    }
+
+    #[test]
+    fn rand_matches_the_microsoft_runtime() {
+        let mut r = Rng::new(1);
+        assert_eq!([r.rand(), r.rand(), r.rand(), r.rand()], [41, 18467, 6334, 26500]);
+    }
+
+    #[test]
+    fn mines_are_drawn_column_then_row() {
+        let g = Game::new(9, 9, 1, Rng::new(1));
+        let (x, y) = (41 % 9, 18467 % 9);
+        assert!(g.cells[g.idx(x, y)].mine);
+    }
+
+    #[test]
+    fn the_first_click_scan_skips_the_last_row_and_column() {
+        // The first free square in reading order is (2,0), in the last column.
+        let mut g = field(&["**.", "*..", "*.."]);
+        g.open(0);
+        assert!(!g.cells[0].mine);
+        assert!(g.cells[4].mine, "the mine went to (1,1)");
+        assert!(!g.cells[2].mine, "never the last column");
+    }
+
+    #[test]
+    fn a_first_click_with_nowhere_to_move_does_nothing() {
+        let mut g = field(&["**.", "**.", "..."]);
+        assert_eq!(g.open(0), Outcome::Nothing);
+        assert!(g.cells[0].mine && !g.started, "the next click is still a first click");
+        assert_eq!(g.cells[0].cover, Cover::Hidden);
+        assert_eq!(g.open(2), Outcome::Opened(1));
+        assert!(g.started);
     }
 
     #[test]

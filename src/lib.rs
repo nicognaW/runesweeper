@@ -14,7 +14,7 @@ use game::Level;
 use rune::AppSpec;
 use storage::Saved;
 
-fn scene(level: Level, seed: u64) -> App {
+fn scene(level: Level, seed: u32) -> App {
     let saved = Saved { level, played: true, ..Saved::default() };
     App::with(saved, seed)
 }

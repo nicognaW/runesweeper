@@ -2,6 +2,8 @@
 
 Checked against Runesweeper at commit `95447de`, and against Windows XP `winmine.exe` as reconstructed from its assembly by repnz ([ReversingMinesweeper](https://github.com/repnz/ReversingMinesweeper) @ `9981360`, target sha256 `bcff8931…af41`). Researched 2026-11-06.
 
+> **Update:** differences 1–4 are fixed. Runesweeper now uses the MSVC `rand()`, seeded once per session, draws the column then the row, and limits the first-click scan to XP's bounds, including XP's "no move" case. Still different: pre-2000 8×8 Beginner (not emulated), the Custom dialog's input handling, and XP's "one click bug" (no win check after relocation), which is not reproduced.
+
 ## Verdict
 
 **The same distribution of boards, but not the same algorithm.** The presets, the custom limits, mines being laid when the field is created, rejection of cells that already hold a mine, and "move the mine, don't regenerate, no guaranteed opening" all match XP. These things differ:
