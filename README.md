@@ -4,7 +4,10 @@ Minesweeper with the rules, menus and quirks of the Windows classic, drawn on th
 [Rune](https://github.com/anomalyco/rune): springs, ripples, liquid-metal chrome, plastic, fire
 and shockwaves.
 
-<p align="center"><img src="docs/play.gif" alt="Opening a field" width="330"></p>
+<p align="center">
+  <img src="docs/play.gif" alt="Opening a field" width="330">
+  <img src="docs/boom.gif" alt="Stepping on a mine" width="378">
+</p>
 
 <p align="center">
   <img src="docs/expert.webp" alt="Expert" width="100%">
@@ -17,6 +20,27 @@ and shockwaves.
   <img src="docs/won.webp" alt="A won game" width="40%">
   <img src="docs/menu.webp" alt="The Game menu" width="40%">
 </p>
+
+## What moves
+
+- A new field deals in from the centre; opened squares lift off in a ripple from the click, and
+  their numbers pop up under a soft halo of their own colour.
+- A highlight glides from square to square on a spring, and the face's eyes follow the pointer.
+- A mine sends a shockwave through the window, knocks the console sideways, flashes it red and
+  sets off the other mines in a chain outward from the hit; the one you stepped on burns.
+- A win turns the flagged tiles gold, runs a swell across the field, throws sparkles and lights
+  a glow around the console.
+- The LED counters crossfade their segments like real LEDs. Shaders do the backdrop, the
+  liquid-metal rim, the plastic face, the LED glow, ripples, fire and the shockwave.
+- Nothing draws while nobody plays: the ambient effects ease to a stop 10 s after the last
+  input and start again on the next. With Reduce Motion on, travel and bounce are off.
+- Small windows and phones get the whole console, scaled to fit.
+
+Motion is checked with Rune's motion gate (pops, jumps, snaps, overshoot that wasn't meant):
+
+```sh
+RUNE_MOTION_GATE=gate.txt runesweeper --scene beginner --script scripts/play.json --duration 4.5 --out frames
+```
 
 ## Download
 

@@ -1,11 +1,11 @@
 //! The window: menu bar, console (counters, face, field) and the dialogs.
 
-use rune::{Cx, El, Transition, col, effect, el, row, spacer, text};
+use rune::{Beat, Color, Cx, El, MotionIntent, Sequence, Spring, Transition, col, effect, el, row, spacer, text};
 use rune_kit::{Button, ButtonVariant, Dialog as KitDialog, Kit, Menu as KitMenu, MenuItem, PaletteSeed, TextInput};
 
 use crate::app::{App, Dialog, Menu};
 use crate::game::{Level, Status};
-use crate::icons::{digit, face, led_text};
+use crate::icons::{digit, face, led_text, pupil, pupils};
 use crate::style::*;
 use crate::{board, gfx};
 
@@ -17,9 +17,20 @@ fn kit(p: &Palette) -> Kit {
 
 fn led(key: &str, v: i32, p: &Palette, color: bool) -> El {
     let (dw, dh) = (17.0, 30.0);
+    // Each place keeps its unlit segments still; the lit ones crossfade as the digit changes,
+    // like a real LED's quick decay.
     let mut digits = row().gap(4.0);
-    for ch in led_text(v).chars() {
-        digits = digits.child(digit(ch, dw, dh, p.led_on, p.led_off));
+    for (n, ch) in led_text(v).chars().enumerate() {
+        digits = digits.child(
+            el().size(dw, dh)
+                .child(digit('8', dw, dh, Color::TRANSPARENT, p.led_off).absolute(0.0, 0.0))
+                .child(
+                    digit(ch, dw, dh, p.led_on, Color::TRANSPARENT)
+                        .key(format!("{key}-{n}-{ch}"))
+                        .absolute(0.0, 0.0)
+                        .transition(Transition::opacity().springs(rune_motion::SpringPair::new(Spring::new(0.08, 0.0), Spring::new(0.22, 0.0)))),
+                ),
+        );
     }
     let (w, h) = (3.0 * dw + 8.0 + 16.0, dh + 12.0);
     el().key(key)
@@ -57,6 +68,17 @@ fn face_button(s: &App, p: &Palette) -> El {
                 .box_shadow(drop(2.0, 6.0, ca(0x000000, 0.6)))
                 .child(effect(gfx::FACE).effect_data([if s.saved.color { 0.0 } else { 5.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(sz, sz).radius(sz / 2.0))
                 .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).transition(Transition::scale(0.85)))
+                .children(pupils(mood).then(|| {
+                    // The eyes follow the pointer around the field.
+                    el().key("eyes")
+                        .absolute(0.0, 0.0)
+                        .size(sz, sz)
+                        .live_offset(s.gaze.smooth(Spring::new(0.28, 0.1)))
+                        .child(pupil(sz, mood, false, ink))
+                        .child(pupil(sz, mood, true, ink))
+                        .transition(Transition::scale(0.85))
+                        .inert()
+                }))
                 .children(won.then(|| effect(gfx::SPARKLES).key("face-stars").effect_data([-1.0, 5.0, 6.0, 0.0]).effect_bleed(30.0).absolute(0.0, 0.0).size(sz, sz))),
         )
         .children((!s.saved.color).then(|| el().size(0.0, 0.0)))
@@ -291,9 +313,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     };
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
     let boom = s.moments.boom.map(|(t, at)| (t as f32, at));
-    let board_el = board::view(s);
+    let reduced = cx.system_reduced_motion() || s.reduced;
+    let board_el = board::view(s, reduced);
+    // Small windows and phones: draw the console scaled to fit (layout keeps its size).
+    let fit = cx.layout_size("stage").map_or(1.0, |[w, h]| ((w - 2.0 * MARGIN) / console_w).min((h - 2.0 * MARGIN) / console_h).clamp(0.3, 1.0));
     let mut console = col()
         .key("console")
+        .scale(fit)
+        .offset(if s.shake && !reduced { 9.0 } else { 0.0 }, 0.0)
+        .offset_motion(Spring::new(0.42, 0.78))
+        .motion_intent(MotionIntent::KICK)
         .size(console_w, console_h)
         .padding(PAD)
         .gap(12.0)
@@ -310,6 +339,13 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
     if let Some((t, _)) = boom {
+        // A red flash through the whole console as the mine goes.
+        const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0), Beat::new(0.09), Beat::new(0.75).opacity(0.0)];
+        let flash = el().key(format!("flash{}", s.field)).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0).fill(ca(0xff2d2d, 0.28)).inert().motion_intent(MotionIntent::PULSE);
+        console = console.child(if reduced { flash.opacity(0.0) } else { flash.sequence(Sequence::new(FLASH)) });
+        let _ = t;
+    }
+    if let Some((t, _)) = boom {
         console = console.child(effect(gfx::HEAT).key(format!("heat{}", s.field)).effect_data([t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
     // The shockwave reads the whole window; it stays mounted (idle, it draws nothing).
@@ -324,7 +360,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .w_full()
         .h_full()
         .child(menu_bar(s, &k, &p, &mut layer))
-        .child(col().grow(1.0).min_h(0.0).center().p_all(MARGIN).child(console));
+        .child(col().key("stage").grow(1.0).min_h(0.0).center().p_all(MARGIN).child(console));
     dialogs(s, &k, &p, &mut layer);
     let base = el()
         .key("root")

@@ -37,7 +37,13 @@ fn col(i: f32) -> Rgb {
     rgb(COLORS[(i.max(0.0) as usize).min(COLORS.len() - 1)])
 }
 
-fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Option<FxLayer> {
+/// Effects that live on the ambient clock, which slows to a stop while nobody plays.
+fn ambient(kind: u32) -> bool {
+    matches!(kind, BACKDROP | RIM | SHIMMER | SELECT | AURA | FIRE | SPARKLES | LED | FACE | GRAIN)
+}
+
+/// `t` is the real clock (one-shots start on it); `amb` the ambient one.
+fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32, amb: f32) -> Option<FxLayer> {
     let fx = match kind {
         BACKDROP => Fx::fill(MeshGradientParams {
             colors: if d[0] > 0.5 {
@@ -63,6 +69,7 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
         FACE => Fx::fill(PlasticParams { color: col(d[0]), roughness: 0.22, dome: 0.55, bevel: 7.0, angle: -0.7 }),
         SHOCK => Fx::distort(DistortParams::Shockwave { at: [origin[0] + d[0], origin[1] + d[1]], reach: 900.0, width: 70.0, amount: d[3], chroma: 0.7, t0: d[2], duration: 1.0 }),
         FIRE => Fx::fire(FireParams { style: FireStyle::Top, height: 46.0, intensity: 1.15, scale: 16.0, embers: 18, ember_rise: 70.0, ..FireParams::default() }),
+        SPARKLES if d[0] < 0.0 && d[1] > 0.0 => Fx::sparkles(SparkleParams { count: d[1] as u32, size: d[2], color: rgb(0xffe6a8), margin: 30.0, ..Default::default() }),
         SPARKLES => Fx::sparkles(SparkleParams {
             burst: (d[0] >= 0.0).then_some(d[0]),
             count: d[1] as u32,
@@ -106,14 +113,22 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
         SHIMMER => Fx::shimmer(ShimmerParams { intensity: 0.1, period: 3.2, band: 60.0, ..Default::default() }),
         _ => return None,
     };
-    Some(fx.on(shape).at(t))
+    // A burst is a one-shot on the real clock; twinkling stars are ambient.
+    let at = if ambient(kind) && !(kind == SPARKLES && d[0] >= 0.0) { amb } else { t };
+    Some(fx.on(shape).at(at))
 }
 
 #[derive(Default)]
 pub struct Gfx {
     fx: Option<FxRenderer>,
     live: bool,
+    /// The ambient clock and how fast it runs (1 while someone plays, easing to 0 when idle).
+    amb: f64,
+    speed: f64,
 }
+
+/// How long after the last input the ambient effects keep moving.
+const IDLE_AFTER: f64 = 10.0;
 
 impl Compositor<App> for Gfx {
     fn animating(&self) -> bool {
@@ -123,11 +138,23 @@ impl Compositor<App> for Gfx {
     fn render(&mut self, f: &mut Frame<'_, App>) {
         let (device, queue, size) = (f.device, f.queue, f.size);
         let t = f.rt.t as f32;
-        let reduced = f.rt.state.reduced;
+        let reduced = f.rt.state.reduced || f.rt.system_reduced_motion();
+        let dt = f.dt.clamp(0.0, 0.1);
+        let awake = f.rt.state.last_input == f64::MAX || f.rt.t - f.rt.state.last_input < IDLE_AFTER;
+        let target = if awake { 1.0 } else { 0.0 };
+        // Ease in over ~0.3 s and out over ~2.5 s, so a stop is a slow settle, never a freeze.
+        let rate = if awake { 3.5 } else { 1.8 };
+        self.speed += (target - self.speed) * (dt * rate).min(1.0);
+        if !awake && self.speed < 0.01 {
+            self.speed = 0.0;
+        }
+        self.amb += dt * self.speed;
+        let amb = self.amb as f32;
         let marks = &f.rt.marks;
         let mut at: Vec<u32> = Vec::new();
         let mut layers: Vec<FxLayer> = Vec::new();
         let mut slots: Vec<FxSlot> = Vec::new();
+        let mut kinds: Vec<u32> = Vec::new();
         for (n, i) in f.rt.instances.iter().enumerate() {
             if i.params[1] != KIND_EFFECT {
                 continue;
@@ -137,12 +164,14 @@ impl Compositor<App> for Gfx {
             let [x, y, w, h] = i.rect.map(|v| v / k);
             let r = i.radii.iter().fold(0.0f32, |a, v| a.max(v.abs())) / k;
             let shape = if kind == FACE { Shape::circle(x + w / 2.0, y + h / 2.0, w.min(h) / 2.0) } else { Shape::rounded(x, y, w, h, r) };
-            let Some(l) = layer(kind, i.uv, shape, [x, y], t) else { continue };
+            let Some(l) = layer(kind, i.uv, shape, [x, y], t, amb) else { continue };
             at.push(n as u32);
+            kinds.push(if kind == SPARKLES && i.uv[0] >= 0.0 { 0 } else { kind });
             layers.push(l.reduced(reduced));
             slots.push(FxSlot::default().scale(k).clip(i.clip, i.fade));
         }
-        self.live = layers.iter().any(|l| l.is_animating());
+        // Ambient layers count only while their clock runs; one-shots until they finish.
+        self.live = self.speed > 0.0 || layers.iter().zip(&kinds).any(|(l, &k)| !ambient(k) && l.is_animating());
         let fx = self.fx.get_or_insert_with(|| FxRenderer::new(device, f.format, FxOptions { dither: true }));
         fx.set_srgb_blend(f.srgb_blend());
         fx.add_format(device, wgpu::TextureFormat::Rgba16Float);

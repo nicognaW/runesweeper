@@ -59,14 +59,31 @@ pub enum Mood {
     Cool,
 }
 
-/// The face's features over its plastic dome, in a `s`×`s` box.
+/// Whether the face draws its eyes as separate, moving pupils (see [`pupil`]).
+pub fn pupils(mood: Mood) -> bool {
+    matches!(mood, Mood::Smile | Mood::Oh)
+}
+
+/// One pupil for a face `s` across, centred on its rest position (`right` for the right eye).
+pub fn pupil(s: f32, mood: Mood, right: bool, ink: Color) -> El {
+    let u = s / 32.0;
+    let r = if mood == Mood::Oh { 2.1 } else { 2.3 } * u;
+    let cx = if right { 20.5 } else { 11.5 } * u;
+    el().absolute(cx - r, 12.5 * u - r).size(2.0 * r, 2.0 * r).radius(r).fill(ink)
+}
+
+/// The face's features over its plastic dome, in a `s`×`s` box (eyes too unless [`pupils`]).
 pub fn face(s: f32, mood: Mood, ink: Color) -> El {
+    face_with(s, mood, ink, !pupils(mood))
+}
+
+fn face_with(s: f32, mood: Mood, ink: Color, eyes: bool) -> El {
     let u = s / 32.0;
     let p = |x: f32, y: f32| [x * u, y * u];
     let w = 2.1 * u;
     let mut shape = Shape::new();
     match mood {
-        Mood::Smile | Mood::Oh => {
+        Mood::Smile | Mood::Oh if eyes => {
             let r = if mood == Mood::Oh { 2.1 } else { 2.3 };
             shape = shape.fill(circle(11.5 * u, 12.5 * u, r * u, 16), ink).fill(circle(20.5 * u, 12.5 * u, r * u, 16), ink);
         }
@@ -86,6 +103,7 @@ pub fn face(s: f32, mood: Mood, ink: Color) -> El {
                 .line(p(8.5, 11.4), p(11.0, 11.4), 1.0 * u, LineCap::Round, ca(0xffffff, 0.55))
                 .line(p(18.9, 11.4), p(21.4, 11.4), 1.0 * u, LineCap::Round, ca(0xffffff, 0.55));
         }
+        _ => {}
     }
     shape = match mood {
         Mood::Oh => shape.fill(circle(16.0 * u, 21.5 * u, 3.4 * u, 20), ink),
