@@ -1,0 +1,17 @@
+# Vendored from https://github.com/anomalyco/rune at 781e2b6d87cd5f32d6f4365956fad4baaf24ee50 (crates/rune-fx, MIT).
+# Patch: `in_parallel` no longer asks for `Sync` on wasm32, where it never spawns threads,
+# so the crate builds for the web (wgpu's WebGPU handles aren't Sync).
+[package]
+name = "rune-fx"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+rune-motion = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
+rune-staging = { git = "https://github.com/anomalyco/rune", rev = "781e2b6d87cd5f32d6f4365956fad4baaf24ee50" }
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "metal", "wgsl"] }
+bytemuck = { version = "1.25", features = ["derive"] }
+
+[target.'cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["vulkan", "dx12"] }

@@ -1,0 +1,10 @@
+{"events": [
+  {"t": 0.5, "type": "tap", "x": 165, "y": 262},
+  {"t": 1.4, "type": "secondary-click", "x": 61, "y": 158},
+  {"t": 1.8, "type": "down", "x": 269, "y": 366},
+  {"t": 2.0, "type": "move", "x": 243, "y": 366},
+  {"t": 2.3, "type": "up", "x": 243, "y": 366},
+  {"t": 3.0, "type": "key", "name": "F2"},
+  {"t": 3.6, "type": "tap", "x": 61, "y": 366},
+  {"t": 4.5, "type": "mark", "name": "end"}
+]}

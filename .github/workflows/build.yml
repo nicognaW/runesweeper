@@ -1,0 +1,168 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUNE_REV: 781e2b6d87cd5f32d6f4365956fad4baaf24ee50
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
+      - run: cargo test --locked
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
+      - run: cargo build --locked --profile dist
+      - name: Package
+        run: |
+          d=runesweeper-linux-x86_64
+          mkdir $d
+          cp target/dist/runesweeper packaging/runesweeper.desktop packaging/runesweeper.png packaging/install-linux.sh README.md LICENSE $d/
+          tar czf $d.tar.gz $d
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runesweeper-linux-x86_64
+          path: runesweeper-linux-x86_64.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --profile dist
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory runesweeper-windows-x86_64 | Out-Null
+          Copy-Item target/dist/runesweeper.exe, README.md, LICENSE runesweeper-windows-x86_64/
+          Compress-Archive runesweeper-windows-x86_64/* runesweeper-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runesweeper-windows-x86_64
+          path: runesweeper-windows-x86_64.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          cargo build --locked --profile dist --target aarch64-apple-darwin
+          cargo build --locked --profile dist --target x86_64-apple-darwin
+      - name: Bundle
+        run: |
+          app=Runesweeper.app
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          mkdir -p $app/Contents/MacOS $app/Contents/Resources
+          lipo -create -output $app/Contents/MacOS/runesweeper \
+            target/aarch64-apple-darwin/dist/runesweeper target/x86_64-apple-darwin/dist/runesweeper
+          sed "s/VERSION/$version/g" packaging/Info.plist > $app/Contents/Info.plist
+          cp assets/icon.icns $app/Contents/Resources/icon.icns
+          codesign --force --deep -s - $app
+          mkdir dmg && cp -R $app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname Runesweeper -srcfolder dmg -ov -format UDZO runesweeper-macos-universal.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runesweeper-macos-universal
+          path: runesweeper-macos-universal.dmg
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen CLI (the version in Cargo.lock)
+        run: |
+          v=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')
+          curl -sSL https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$v/wasm-bindgen-$v-x86_64-unknown-linux-musl.tar.gz | tar xz
+          sudo mv wasm-bindgen-$v-x86_64-unknown-linux-musl/wasm-bindgen /usr/local/bin/
+          wasm-bindgen --version
+      - name: Build
+        run: |
+          git clone --filter=blob:none -q https://github.com/anomalyco/rune ../rune
+          git -C ../rune checkout -q $RUNE_REV
+          ../rune/scripts/web-build.sh runesweeper --out dist/web --no-html
+          cp web/index.html dist/web/index.html
+          cp packaging/runesweeper.png dist/web/icon.png
+          (cd dist/web && zip -qr ../../runesweeper-web.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runesweeper-web
+          path: runesweeper-web.zip
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist/web
+
+  pages:
+    needs: web
+    if: github.event_name != 'pull_request' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  release:
+    needs: [test, linux, windows, macos, web]
+    if: github.event_name != 'pull_request' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+      - name: Rolling build from the default branch
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest out/* --prerelease --target ${{ github.sha }} \
+            --title "Latest build" \
+            --notes "Built from ${{ github.sha }}. Download the file for your system; see the README for install steps."

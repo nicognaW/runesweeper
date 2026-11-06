@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Runesweeper
+Comment=Minesweeper, drawn and lit on the GPU
+Exec=runesweeper
+Icon=runesweeper
+Categories=Game;LogicGame;
+Terminal=false
