@@ -190,6 +190,37 @@ strings! {
     StepCountRest1: "Only {} left to find, and this number holds at most {}, so every other hidden cell is a mine.", "根据剩余雷数：还剩 {}没找到，这个数字周围最多只有 {}……所以其余的格子全是雷。";
     StepCountOver: "Then these numbers would need at least {}, but only {} left to find.", "那么这几个数字周围最少要有 {}，可是根据剩余雷数，只剩 {}没找到。";
     StepCountUnder: "Then even with every other hidden cell a mine there would be at most {}, fewer than the {} left to find.", "那么就算其余的格子全是雷，最多也只有 {}，凑不够剩下的 {}。";
+    // Guesses (ADR 0002): when no cell can be proven, reasons a player can check by hand.
+    TechFiftyFifty: "True 50/50", "死猜";
+    TechPseudo: "Pseudo 50/50", "伪死猜";
+    TechDead: "Dead cell", "无信息格";
+    TechWays: "Counting arrangements", "数摆法";
+    TechFewer: "Fewer mines", "少雷原则";
+    TechOpening: "Guess for an opening", "猜空";
+    TechTopLeft: "Classic's top-left quirk", "原版首击移雷";
+    TechBlind: "Forced guess", "必须猜";
+    NudgeFiftyFifty: "No cell can be proven. Look for two cells nothing can ever tell apart.", "推不出能确定的格子。找两格永远分不出来的死猜。";
+    NudgePseudo: "No cell can be proven. Look for a cell that is either safe or half of a 50/50.", "推不出能确定的格子。找一格：它要么安全，要么就是死猜的一半。";
+    NudgeDead: "No cell can be proven. One cell would tell you nothing if you opened it.", "推不出能确定的格子。有一格就算打开了也不会给出新信息。";
+    NudgeWays: "No cell can be proven. Count the ways the numbers can be satisfied.", "推不出能确定的格子。数一数这几个数字有几种摆法。";
+    NudgeFewer: "No cell can be proven. Arrangements with fewer mines come up more often.", "推不出能确定的格子。雷少的摆法更常见。";
+    NudgeOpening: "No cell can be proven. Look away from the numbers, where a cell may open an area.", "推不出能确定的格子。看看不挨着数字的格子，可能一下开出一片空。";
+    NudgeTopLeft: "No cell can be proven. Remember where Classic moves a mine under the first click.", "推不出能确定的格子。想想原版把第一下点到的雷移到了哪里。";
+    NudgeBlind: "No cell can be proven, and nothing you could check by hand favours any cell: a guess is needed here.", "推不出能确定的格子，也没有能手算的理由偏向哪一格：这里只能猜。";
+    CellGuess: "Guess this cell.", "猜这一格。";
+    CellAvoid: "Avoid this cell.", "别点这一格。";
+    StepFiftyFifty: "These two cells hold one mine between them, and every number open now or later touches both or neither, so nothing can ever tell them apart. Guess now: waiting gains nothing.", "这两格里恰好有 1 个雷，现在和以后能打开的数字要么同时挨着这两格，要么都不挨着……永远分不出来，这是死猜。现在就猜，等下去也没用。";
+    StepAnnounced1: "This is the 50/50 this field was built with.", "这就是本局开局时预告的那个死猜。";
+    StepAnnounced: "This is one of the {} 50/50s this field was built with.", "这是本局开局时预告的 {} 个死猜之一。";
+    StepPseudo: "If this cell is a mine, it and that one form a 50/50 nothing can split, since the cells that could tell them apart would all be mines. If it is safe, it opens. Either way, guessing it now costs nothing.", "如果这一格是雷，它和那一格就成了死猜：能分出它们的格子都会是雷。如果它不是雷，就能打开。所以现在猜它不吃亏。";
+    StepDead: "If this cell is safe it can only show a {}, which tells you nothing new, so you would have to guess again. Avoid it.", "这一格如果安全，只能是 {}，打开了也没有新信息，还得再猜。别点它。";
+    StepWaysOne: "This {} can be satisfied {} ways, all with the same number of mines, so each comes up as often. This cell is a mine in only {} of them.", "这个 {} 只有 {} 种摆法，雷数都一样，每种都一样常见。这一格只在其中 {} 种里是雷。";
+    StepWaysMany: "These numbers can be satisfied {} ways, all with the same number of mines, so each comes up as often. This cell is a mine in only {} of them.", "这几个数字只有 {} 种摆法，雷数都一样，每种都一样常见。这一格只在其中 {} 种里是雷。";
+    StepFewer: "These numbers can be satisfied with as few as {}, or with more. The other mines go among the {} away from the numbers, and each mine fewer here leaves more ways to place them, so arrangements with fewer mines here come up more often.", "这几个数字最少用 {}就能满足，也可以更多。其余的雷在不挨着数字的 {}里，这里每少一个雷，其余的雷就有更多摆法，所以雷少的摆法更常见。";
+    StepFewerSafe: "This cell is safe in every arrangement with only {}.", "在只用 {}的摆法里，这一格都是安全的。";
+    StepOpening: "No number touches this cell, so nothing makes it riskier than the rest: the {} left hold {}. With only {} neighbours, it is the most apt to be empty and open an area.", "这一格不挨着任何数字，没有额外的风险：剩下的 {}里有 {}。它只有 {} 个相邻格，最容易是空，一下开出一片。";
+    StepTopLeft: "In Classic, as in Windows XP, a mine under the first click moves to the top-left corner (or the next free cell along the top row), so early on this cell hides a mine more often than it would otherwise. Avoid it.", "原版里，第一下点到的雷会被移到左上角（那里已有雷就往右移），所以开局时这一格比平常更容易是雷。别点它。";
+    StepNotTopLeft: "Not the top-left corner, though: in Classic, as in Windows XP, a mine under the first click moves there (or along the top row), so early on it hides a mine more often.", "但别选左上角：原版里，第一下点到的雷会被移到那里（已有雷就往右移），所以开局时那一格更容易是雷。";
 }
 
 impl S {

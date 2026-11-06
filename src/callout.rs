@@ -6,7 +6,8 @@
 use rune::{El, Transition, col, el, row, spacer, text};
 
 use crate::app::App;
-use crate::game::Cover;
+use crate::game::{Cover, Mode};
+use crate::record::Act;
 use crate::hint::{self, Action, Hint, Verdict, words};
 use crate::strings::S;
 use crate::style::*;
@@ -32,16 +33,21 @@ impl App {
             return;
         }
         let last = self.record.moves.last().map(|m| m.cell);
-        self.hint = Some(Shown { hint: hint::of(&self.game, last), stage: 1 });
+        let field = hint::Field {
+            classic_first: (self.mode == Mode::Classic).then(|| self.record.moves.iter().find(|m| m.act == Act::Open).map(|m| m.cell)).flatten(),
+            announced: &self.fifty_fifties,
+        };
+        self.hint = Some(Shown { hint: hint::advise_game(&self.game, last, &field), stage: 1 });
         self.record.hints += 1;
         self.keep_draft();
     }
 
-    /// Plays the move the hint's last stage names: open the safe cell, flag the mine, or take
-    /// the wrong flag off. Nothing before that stage.
+    /// Plays the move the hint's last stage names: open the safe cell or the guess, flag the
+    /// mine, or take the wrong flag off. Nothing before that stage, nor for a cell to avoid.
     pub fn apply_hint(&mut self) {
         let Some(t) = self.hint.as_ref().filter(|s| s.stage >= s.hint.stages()).and_then(|s| s.hint.target) else { return };
-        match t.verdict.action() {
+        let Some(action) = t.verdict.action() else { return };
+        match action {
             Action::Open => self.release_at(false, t.cell),
             // Right clicks until the cell shows what the hint says: a question mark goes to
             // hidden before a flag, and with marks on a flag comes off through one.
@@ -144,6 +150,7 @@ pub fn marks(s: &App) -> Vec<[f32; 4]> {
         .iter()
         .copied()
         .chain(h.target.map(|t| t.cell))
+        .chain(h.partner())
         .map(|i| {
             let (x, y) = (WELL + (i % s.game.w) as f32 * PITCH, WELL + (i / s.game.w) as f32 * PITCH);
             [x - 2.0, y - 2.0, x + TILE + 2.0, y + TILE + 2.0]
@@ -172,6 +179,9 @@ pub fn rings(s: &App, p: &Palette) -> Vec<El> {
     }
     if let Some(t) = h.target.filter(|_| shown.stage >= 3) {
         v.push(ring("hint-cell".into(), t.cell, verdict_color(t.verdict, p)));
+        if let Some(other) = h.partner() {
+            v.push(ring("hint-partner".into(), other, p.muted));
+        }
     }
     v
 }
@@ -179,7 +189,8 @@ pub fn rings(s: &App, p: &Palette) -> Vec<El> {
 fn verdict_color(v: Verdict, p: &Palette) -> rune::Color {
     match v {
         Verdict::Safe => p.numbers[2],
-        Verdict::Mine | Verdict::WrongFlag => p.flag,
+        Verdict::Mine | Verdict::WrongFlag | Verdict::Avoid => p.flag,
+        Verdict::Guess => p.accent,
     }
 }
 
@@ -224,7 +235,7 @@ pub fn view(s: &App, p: &Palette, width: f32) -> Option<El> {
             reason = reason.child(line(r, SMALL, p.text).key(format!("hint-step{i}")));
         }
         body = body.child(reason);
-        if h.target.is_some() {
+        if h.target.and_then(|t| t.verdict.action()).is_some() {
             let apply = well(el().key("hint-apply").h(30.0).px(14.0).radius(8.0))
                 .center()
                 .role("button")

@@ -14,7 +14,11 @@
 //! Any cell perfect logic proves gets a hint: deductions from more than two numbers, and from
 //! the count of mines left, come from [`logic`], which finds the fewest numbers that prove the
 //! cell and explains them one line per step.
+//!
+//! When no cell can be proven, [`advise`] adds the [`guess`] tier: how a strong player would
+//! choose, from reasons a player can check by hand, never a probability.
 
+pub mod guess;
 mod logic;
 pub mod words;
 
@@ -42,6 +46,29 @@ pub enum Technique {
     Count,
     /// Nothing perfect logic proves.
     Nothing,
+    /// No cell can be proven: how to choose the guess.
+    Guess(Guess),
+}
+
+/// Why a guess is chosen, in the order a hint gives them: the first that holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Guess {
+    /// Two cells nothing can ever tell apart: take it now.
+    FiftyFifty,
+    /// A cell that is either safe or half of a true 50/50: take it now.
+    Pseudo,
+    /// A cell that, if safe, would show a number that settles nothing: avoid it.
+    Dead,
+    /// A few arrangements, as common as each other, and the cell a mine in few of them.
+    Ways,
+    /// Arrangements with fewer mines come up more often, and the cell is safe in those.
+    Fewer,
+    /// A cell away from the numbers, on the edge, apt to open an area.
+    Opening,
+    /// Classic's first-click mine moved to the top left: avoid it early on.
+    TopLeft,
+    /// Nothing favours any cell: a guess is needed, and no cell is named.
+    Blind,
 }
 
 /// The two-number patterns everything else is built from.
@@ -75,7 +102,7 @@ impl Technique {
             Technique::Pattern(_) => Some(Grade::Medium),
             Technique::Reduction(_) | Technique::Chain | Technique::Count => Some(Grade::Hard),
             Technique::Suppose => Some(Grade::Evil),
-            Technique::WrongFlag | Technique::Nothing => None,
+            Technique::WrongFlag | Technique::Nothing | Technique::Guess(_) => None,
         }
     }
 }
@@ -87,6 +114,10 @@ pub enum Verdict {
     Mine,
     /// Flagged, but proven safe.
     WrongFlag,
+    /// Not proven: the cell to guess.
+    Guess,
+    /// Not proven: a cell not to guess.
+    Avoid,
 }
 
 /// The move Apply plays for a verdict.
@@ -98,11 +129,13 @@ pub enum Action {
 }
 
 impl Verdict {
-    pub fn action(self) -> Action {
+    /// What Apply plays; nothing for a cell to avoid.
+    pub fn action(self) -> Option<Action> {
         match self {
-            Verdict::Safe => Action::Open,
-            Verdict::Mine => Action::Flag,
-            Verdict::WrongFlag => Action::Unflag,
+            Verdict::Safe | Verdict::Guess => Some(Action::Open),
+            Verdict::Mine => Some(Action::Flag),
+            Verdict::WrongFlag => Some(Action::Unflag),
+            Verdict::Avoid => None,
         }
     }
 }
@@ -162,6 +195,27 @@ pub enum Step {
     /// ...then even with every other hidden cell a mine there would be at most `most`, fewer
     /// than the `left` to find.
     CountUnder { most: usize, left: usize },
+    /// These two cells hold one mine, and no number, open or yet to open, tells them apart.
+    FiftyFifty { cells: [usize; 2] },
+    /// The 50/50 is one of the `count` a Max Guess field announced.
+    Announced { count: usize },
+    /// Were the cell a mine, it and `partner` would be a true 50/50.
+    Pseudo { cell: usize, partner: usize },
+    /// If safe, the cell can only show `shows`.
+    Dead { cell: usize, shows: u8 },
+    /// The numbers (one, showing `n`, or several) have `ways` arrangements, all with the same
+    /// count of mines; the cell is a mine in `mine_in` of them.
+    Ways { n: Option<u8>, ways: usize, mine_in: usize },
+    /// The numbers need at least `least` mines; `away` hidden cells touch no number.
+    Fewer { least: usize, away: usize },
+    /// The cell is safe in every arrangement with only `least` mines.
+    FewerSafe { least: usize },
+    /// No number touches the cell, which has `neighbours`; `hidden` cells hold `mines`.
+    Opening { neighbours: usize, hidden: usize, mines: usize },
+    /// XP moves a first-click mine to the top left.
+    TopLeft,
+    /// ...so not `cell`, the top left, which would have been as good but for that.
+    NotTopLeft { cell: usize },
 }
 
 /// A hint: what to look for, where, and why.
@@ -184,6 +238,18 @@ impl Hint {
         if self.target.is_some() { 4 } else { 1 }
     }
 
+    /// The other cell a guess talks about: the 50/50's other half, the pseudo-50/50's
+    /// partner, or the top left an opening passes over.
+    pub fn partner(&self) -> Option<usize> {
+        let cell = self.target?.cell;
+        self.steps.iter().find_map(|s| match *s {
+            Step::FiftyFifty { cells } => cells.into_iter().find(|&c| c != cell),
+            Step::Pseudo { partner, .. } => Some(partner),
+            Step::NotTopLeft { cell } => Some(cell),
+            _ => None,
+        })
+    }
+
     fn nothing() -> Hint {
         Hint { technique: Technique::Nothing, numbers: Vec::new(), target: None, steps: Vec::new() }
     }
@@ -193,6 +259,31 @@ impl Hint {
 pub fn of(game: &Game, last: Option<usize>) -> Hint {
     let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
     find(&View::of(game), &flags, last)
+}
+
+/// What a hint knows of the field beyond what the player sees.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Field<'a> {
+    /// Classic's first click: a mine under it moved to the top left.
+    pub classic_first: Option<usize>,
+    /// Max Guess: the true 50/50s the field was built with.
+    pub announced: &'a [(usize, usize)],
+}
+
+/// The hint for `game` as the player sees it, the last move at `last`, with the guess tier
+/// when no cell can be proven.
+pub fn advise_game(game: &Game, last: Option<usize>, field: &Field) -> Hint {
+    let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
+    advise(&View::of(game), &flags, last, field)
+}
+
+/// [`find`], or when it finds nothing and no cell can be proven, how to choose a guess.
+pub fn advise(v: &View, flags: &[bool], last: Option<usize>, field: &Field) -> Hint {
+    let h = find(v, flags, last);
+    if h.technique != Technique::Nothing {
+        return h;
+    }
+    guess::choose(v, flags, last, field).unwrap_or(h)
 }
 
 /// The hint for the open numbers in `v`, with the player's flags at `flags` and their last
