@@ -108,15 +108,8 @@ fn tools(s: &App, p: &Palette) -> Vec<El> {
     v
 }
 
-/// Max Guess, once the field is laid: how many true 50/50s it forces, before any is met.
-fn fifty_count(s: &App, p: &Palette) -> Option<El> {
-    let laid = s.mode == Mode::MaxGuess && !s.unlaid && s.generating.is_none();
-    let label = s.trf(S::FiftyCount, &[&s.fifty_fifties.len()]);
-    laid.then(|| well(row().key("fifty-count").h(30.0).px(12.0).radius(9.0)).center_y().role("status").label(label.clone()).child(text(label).font(UI).color(p.text)))
-}
-
 pub fn toolbar(s: &App, p: &Palette) -> El {
-    row().key("toolbar").w_full().h(TOOLBAR_H).px(16.0).pt(8.0).gap(8.0).center_y().child(chip(s, p)).children(fifty_count(s, p)).child(spacer()).children(tools(s, p))
+    row().key("toolbar").w_full().h(TOOLBAR_H).px(16.0).pt(8.0).gap(8.0).center_y().child(chip(s, p)).child(spacer()).children(tools(s, p))
 }
 
 /// A panel's surface, styled like the console it drops from, anchored under its button.

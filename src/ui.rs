@@ -4,7 +4,7 @@ use rune::{Cx, El, MotionIntent, col, effect, el, row, spacer, text};
 use rune_kit::{Kit, PaletteSeed};
 
 use crate::app::App;
-use crate::game::Status;
+use crate::game::{Mode, Status};
 use crate::icons::{digit, face, led_text};
 use crate::strings::S;
 use crate::style::*;
@@ -36,6 +36,26 @@ fn led(key: &str, label: String, v: i32, p: &Palette, color: bool, gold: bool) -
         .child(digits)
         .role("status")
         .label(label)
+}
+
+/// Max Guess, once the field is laid: how many true 50/50s it forces, before any is met. A
+/// tab on the console's top rim, so it covers no cell and costs the toolbar no room.
+fn fifty_count(s: &App, p: &Palette, console_w: f32) -> Option<El> {
+    let laid = s.mode == Mode::MaxGuess && !s.unlaid && s.generating.is_none();
+    let label = s.trf(S::FiftyCount, &[&s.fifty_fifties.len()]);
+    let tab = el()
+        .key("fifty-count")
+        .h(22.0)
+        .px(10.0)
+        .radius(11.0)
+        .fill(p.led_bg)
+        .border(1.0, ca(0xffffff, 0.08))
+        .box_shadow(drop(2.0, 6.0, ca(0x000000, 0.5)))
+        .center()
+        .role("status")
+        .label(label.clone())
+        .child(text(label).font(SMALL).color(p.text));
+    laid.then(|| row().absolute(0.0, -11.0).size(console_w, 22.0).center().inert().child(tab))
 }
 
 fn face_button(s: &App, p: &Palette) -> El {
@@ -164,7 +184,8 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
         .child(header(s, &p, inner_w))
-        .child(board_el);
+        .child(board_el)
+        .children(fifty_count(s, &p, console_w));
     if s.moments.won.is_some() {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
