@@ -7,7 +7,7 @@
 //! only if a field changes meaning.
 
 use crate::game::{Cover, Game, Level, Mode};
-use crate::generate::Dims;
+use crate::generate::LevelSize;
 
 /// The line format's version.
 const VERSION: u32 = 1;
@@ -111,7 +111,7 @@ pub struct Record {
     pub at: u64,
     pub mode: Mode,
     /// Columns, rows, mines: the level.
-    pub dims: Dims,
+    pub dims: LevelSize,
     pub end: End,
     /// The timer when the game ended.
     pub seconds: u32,
@@ -132,7 +132,7 @@ pub struct Record {
 
 impl Record {
     /// An empty record for a field of `mode` at `dims`.
-    pub fn new(mode: Mode, dims: Dims) -> Record {
+    pub fn new(mode: Mode, dims: LevelSize) -> Record {
         Record {
             at: 0,
             mode,
@@ -164,7 +164,7 @@ impl Record {
 
     /// The field at the end of the game, rebuilt from its layout and moves (None until a
     /// record without its mines is laid: see [`Record::base`]).
-    pub fn replay(&self) -> Option<Game> {
+    pub fn rebuild(&self) -> Option<Game> {
         let mut g = self.base()?;
         for m in &self.moves {
             m.apply(&mut g);
@@ -282,7 +282,7 @@ fn parse_move(s: &str) -> Option<Move> {
 }
 
 /// The fastest win among `records` for `mode` at `dims`; of equal times, the earliest.
-pub fn fastest(records: &[Record], mode: Mode, dims: Dims) -> Option<&Record> {
+pub fn fastest(records: &[Record], mode: Mode, dims: LevelSize) -> Option<&Record> {
     records.iter().filter(|r| r.end == End::Won && r.mode == mode && r.dims == dims).min_by_key(|r| (r.seconds, r.at))
 }
 

@@ -105,7 +105,7 @@ impl Review {
     /// field was built with (the game just played has both, so nothing is laid again).
     pub fn on(record: &Record, base: Game, announced: Vec<(usize, usize)>) -> Review {
         let markers = markers(record, &base);
-        let end = replay(&base, record, record.moves.len());
+        let end = rebuild(&base, record, record.moves.len());
         let (three_bv, solved) = record::three_bv(&end);
         let ms = record.moves.last().map_or(0, |m| m.ms);
         let seconds = if ms > 0 { ms as f64 / 1000.0 } else { record.seconds as f64 };
@@ -156,7 +156,7 @@ impl Review {
     /// chord was safe.
     pub fn hint(&self, k: usize) -> Hint {
         let m = &self.markers[k];
-        let g = replay(&self.base, &self.record, m.at);
+        let g = rebuild(&self.base, &self.record, m.at);
         if let Kind::Chord { number, ref cells, .. } = m.kind {
             return chord_hint(&g, number, cells);
         }
@@ -173,13 +173,14 @@ impl Review {
 
     fn show(&mut self, at: usize) {
         if at != self.at {
-            self.game = replay(&self.base, &self.record, at);
+            self.game = rebuild(&self.base, &self.record, at);
             self.at = at;
         }
     }
 }
 
-fn replay(base: &Game, record: &Record, at: usize) -> Game {
+/// The field after the record's first `at` moves on `base`.
+fn rebuild(base: &Game, record: &Record, at: usize) -> Game {
     let mut g = base.clone();
     for m in &record.moves[..at] {
         m.apply(&mut g);

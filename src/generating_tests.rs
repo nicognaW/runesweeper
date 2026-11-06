@@ -9,7 +9,7 @@ use rune::{Key, Runtime};
 
 use crate::app::App;
 use crate::game::{Cover, Game, Level, Mode};
-use crate::generate::{self, Dims};
+use crate::generate::{self, LevelSize};
 use crate::generating;
 use crate::record::{Act, Layout};
 use crate::storage::Saved;
@@ -42,22 +42,22 @@ static SLOW: Gate = Gate::new();
 static CANCELLED: Gate = Gate::new();
 static REVIEWED: Gate = Gate::new();
 
-fn slow_lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+fn slow_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     SLOW.wait();
     generate::lay(mode, dims, seed, first)
 }
 
-fn cancelled_lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+fn cancelled_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     CANCELLED.wait();
     generate::lay(mode, dims, seed, first)
 }
 
-fn reviewed_lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+fn reviewed_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     REVIEWED.wait();
     generate::lay(mode, dims, seed, first)
 }
 
-fn never_lay(_: Mode, _: Dims, _: u64, _: usize) -> Game {
+fn never_lay(_: Mode, _: LevelSize, _: u64, _: usize) -> Game {
     panic!("a record that keeps its mines is never laid again")
 }
 
@@ -66,7 +66,7 @@ fn no_guess(level: Level) -> Saved {
 }
 
 /// A runtime whose poll runs every frame, as the window's does.
-fn polled(saved: Saved, lay: fn(Mode, Dims, u64, usize) -> Game) -> Runtime<App> {
+fn polled(saved: Saved, lay: fn(Mode, LevelSize, u64, usize) -> Game) -> Runtime<App> {
     let mut rt = runtime(saved);
     rt.poll = Some(|s, t, tx| s.tick(t, tx));
     rt.update(|s, _| s.lay = lay);

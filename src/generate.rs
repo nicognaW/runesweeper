@@ -18,18 +18,18 @@ use crate::solver::{Strength, play};
 mod max_guess;
 pub use max_guess::{MaxGuess, Search, budget, max_guess, searched};
 
-/// Columns, rows, mines.
-pub type Dims = (usize, usize, usize);
+/// A Level's size and mine count, as numbers: columns, rows, mines.
+pub type LevelSize = (usize, usize, usize);
 
 /// The field for `mode` at `dims`, from `seed`, for a first click on `first`, with nothing
 /// open. Classic's seed is the `rand()` state the field is dealt from (`srand(seed)`), and it
 /// ignores `first`: XP moves a first-click mine when the click lands, not here.
-pub fn lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+pub fn lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     lay_counting(mode, dims, seed, first).0
 }
 
 /// [`lay`], and how many uniform fields were drawn to find it.
-pub fn lay_counting(mode: Mode, (w, h, mines): Dims, seed: u64, first: usize) -> (Game, u32) {
+pub fn lay_counting(mode: Mode, (w, h, mines): LevelSize, seed: u64, first: usize) -> (Game, u32) {
     match mode {
         Mode::Classic => (Game::new(w, h, mines, Rng::new(seed as u32)), 1),
         Mode::GentleNoGuess => redraw_until_clear(w, h, mines, seed, first, Strength::Gentle),

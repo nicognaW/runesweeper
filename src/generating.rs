@@ -10,10 +10,10 @@
 use rune::Waker;
 
 use crate::game::{Game, Mode};
-use crate::generate::{self, Dims};
+use crate::generate::{self, LevelSize};
 
 /// What lays a field: [`generate::lay`], or a stand-in for tests.
-pub type Lay = fn(Mode, Dims, u64, usize) -> Game;
+pub type Lay = fn(Mode, LevelSize, u64, usize) -> Game;
 
 /// The field (mode, level, seed, first click) name, on its way.
 pub struct Generating {
@@ -25,7 +25,7 @@ pub struct Generating {
 impl Generating {
     /// Starts laying the field `lay` gives for these inputs; `wake` runs once it is ready.
     /// The web's worker runs [`generate::lay`] whatever `lay` is.
-    pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Generating {
+    pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Generating {
         Generating { first, job: imp::Job::start(lay, mode, dims, seed, first, wake) }
     }
 
@@ -71,7 +71,7 @@ mod imp {
     }
 
     impl Job {
-        pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Job {
+        pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Job {
             let (send, field) = channel();
             let stop = Arc::new(AtomicBool::new(false));
             let stopped = stop.clone();
@@ -151,14 +151,14 @@ mod imp {
     }
 
     pub struct Job {
-        args: (Lay, Mode, Dims, u64, usize),
+        args: (Lay, Mode, LevelSize, u64, usize),
         worker: Option<Worker>,
         reply: Rc<RefCell<Reply>>,
         _listeners: Option<(Closure<dyn FnMut(MessageEvent)>, Closure<dyn FnMut(JsValue)>)>,
     }
 
     impl Job {
-        pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Job {
+        pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Job {
             let worker = SPARE.with(|s| s.borrow_mut().take()).or_else(spawn);
             let reply = Rc::new(RefCell::new(if worker.is_some() { Reply::Waiting } else { Reply::Failed }));
             let mut listeners = None;

@@ -525,7 +525,7 @@ impl App {
             return;
         }
         if !self.game.started && !chord {
-            // Classic keeps its field as dealt: replaying the first click moves a mine again.
+            // Classic keeps its field as dealt: playing the first click again moves a mine again.
             self.record.layout = Layout::Mines(self.game.mine_cells());
         }
         self.play(chord, i);

@@ -11,7 +11,7 @@
 //! depends only on (dims, seed, first click) (ADR 0001), and a caller can run the steps in
 //! slices.
 
-use super::{Dims, Stream};
+use super::{LevelSize, Stream};
 use crate::game::Game;
 use crate::solver::play::{self, Walk};
 
@@ -27,12 +27,12 @@ pub struct MaxGuess {
 }
 
 /// The Max Guess field for `dims` from `seed`, for a first click on `first`.
-pub fn max_guess(dims: Dims, seed: u64, first: usize) -> MaxGuess {
+pub fn max_guess(dims: LevelSize, seed: u64, first: usize) -> MaxGuess {
     searched(dims, seed, first, budget(dims))
 }
 
 /// [`max_guess`] with another budget, for measuring what more steps buy.
-pub fn searched(dims: Dims, seed: u64, first: usize, budget: u32) -> MaxGuess {
+pub fn searched(dims: LevelSize, seed: u64, first: usize, budget: u32) -> MaxGuess {
     let mut s = Search::with_budget(dims, seed, first, budget);
     while !s.done() && !super::stopped() {
         s.step();
@@ -46,7 +46,7 @@ pub fn searched(dims: Dims, seed: u64, first: usize, budget: u32) -> MaxGuess {
 /// at 300 steps, 9.6 at 1,000, 17 at 2,000), while a step costs more on a bigger field (about
 /// 0.04 ms on Beginner, 0.24 ms on Intermediate, 0.85 ms on Expert, native release). These
 /// keep Expert under a second natively.
-pub fn budget((w, h, _): Dims) -> u32 {
+pub fn budget((w, h, _): LevelSize) -> u32 {
     let cells = (w * h) as i64;
     let steps = if cells <= 256 { 2000 - (cells - 81) * 500 / 175 } else { 1500 - (cells - 256) * 500 / 224 };
     steps.clamp(300, 2000) as u32
@@ -77,11 +77,11 @@ pub struct Search {
 }
 
 impl Search {
-    pub fn new(dims: Dims, seed: u64, first: usize) -> Search {
+    pub fn new(dims: LevelSize, seed: u64, first: usize) -> Search {
         Search::with_budget(dims, seed, first, budget(dims))
     }
 
-    fn with_budget((w, h, mines): Dims, seed: u64, first: usize, budget: u32) -> Search {
+    fn with_budget((w, h, mines): LevelSize, seed: u64, first: usize, budget: u32) -> Search {
         let mut rng = Stream::new(seed);
         let (fx, fy) = ((first % w) as isize, (first / w) as isize);
         let free: Vec<bool> = (0..w * h).map(|i| ((i % w) as isize - fx).abs() > 1 || ((i / w) as isize - fy).abs() > 1).collect();
