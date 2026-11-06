@@ -8,9 +8,14 @@
 //!
 //! Each hint carries its technique (and so its grade), the numbers it reads (its witnesses, in
 //! the order the reason reads them), the cell it names with its verdict, and the reason as
-//! [`Step`]s, so later techniques (longer chains, the mine count, named patterns, guesses) add
-//! steps and techniques rather than new shapes.
+//! [`Step`]s, so later techniques (named patterns, guesses) add steps and techniques rather
+//! than new shapes.
+//!
+//! Any cell perfect logic proves gets a hint: deductions from more than two numbers, and from
+//! the count of mines left, come from [`logic`], which finds the fewest numbers that prove the
+//! cell and explains them one line per step.
 
+mod logic;
 pub mod words;
 
 use crate::game::{Cover, Game};
@@ -29,7 +34,13 @@ pub enum Technique {
     Pattern(Pattern),
     /// Mines proven by single numbers subtracted from two numbers, which then form a pattern.
     Reduction(Pattern),
-    /// Nothing one or two numbers settle.
+    /// Any number of numbers, one or two at a time, each step settling cells for the next.
+    Chain,
+    /// Supposing the cell were the other way, a number breaks.
+    Suppose,
+    /// The count of mines left, with the numbers.
+    Count,
+    /// Nothing perfect logic proves.
     Nothing,
 }
 
@@ -62,7 +73,8 @@ impl Technique {
         match self {
             Technique::Single | Technique::Satisfied => Some(Grade::Easy),
             Technique::Pattern(_) => Some(Grade::Medium),
-            Technique::Reduction(_) => Some(Grade::Hard),
+            Technique::Reduction(_) | Technique::Chain | Technique::Count => Some(Grade::Hard),
+            Technique::Suppose => Some(Grade::Evil),
             Technique::WrongFlag | Technique::Nothing => None,
         }
     }
@@ -128,6 +140,28 @@ pub enum Step {
     Contradiction { cell: usize, numbers: Vec<usize> },
     /// The cell just proven safe carries a flag.
     FlagWrong { cell: usize },
+    /// With what the lines above settle, the number still needs `need` mines among its
+    /// `cells` left: all mines (`need` is their count), or all safe (`need` is 0).
+    Now { at: usize, n: u8, need: usize, cells: Vec<usize>, mine: bool },
+    /// Suppose the cell were a mine (or safe)...
+    Suppose { cell: usize, mine: bool },
+    /// ...then this number would have too many mines (`over`), or too few.
+    Broken { at: usize, n: u8, over: bool },
+    /// ...then these numbers (and, with `count`, the mines left) could not all be right.
+    NoRoom { count: bool },
+    /// So the cell is a mine (or safe).
+    So { mine: bool },
+    /// Only `left` mines are left to find, and the `numbers` need them all: every other
+    /// hidden cell is safe.
+    CountAll { left: usize, numbers: usize },
+    /// Only `left` are left to find, and the `numbers` hold at most `held`: every other
+    /// hidden cell is a mine.
+    CountRest { left: usize, held: usize, numbers: usize },
+    /// ...then these numbers would need at least `need`, more than the `left` to find.
+    CountOver { need: usize, left: usize },
+    /// ...then even with every other hidden cell a mine there would be at most `most`, fewer
+    /// than the `left` to find.
+    CountUnder { most: usize, left: usize },
 }
 
 /// A hint: what to look for, where, and why.
@@ -162,8 +196,8 @@ pub fn of(game: &Game, last: Option<usize>) -> Hint {
 }
 
 /// The hint for the open numbers in `v`, with the player's flags at `flags` and their last
-/// move at `last`. A wrong flag comes first; then a named pattern, then the fewest numbers, a
-/// safe cell before a mine, and the nearest the last move.
+/// move at `last`. A wrong flag comes first; then the fewest numbers, a named pattern, a safe
+/// cell before a mine, and the nearest the last move.
 pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
     let cs = constraints(v, &vec![Fact::Unknown; v.len()]);
     let mut found = Vec::new();
@@ -171,10 +205,59 @@ pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
     satisfied(v, &cs, &mut found);
     pairs(v, &cs, &mut found);
     reductions(v, &cs, &mut found);
+    let (wrong, right) = named(v, flags, &found);
 
+    // Whatever else logic proves from as few numbers, explained only if chosen.
+    let near = |h: &Hint| distance(v, h, last);
+    let fewest = wrong.iter().chain(&right).map(|h| h.numbers.len()).min();
+    let nameable = |cell: usize, mine: bool| v.open[cell].is_none() && !(flags[cell] && mine);
+    let mut more = logic::fewest(&cs, fewest.unwrap_or(logic::EXHAUSTIVE).min(logic::EXHAUSTIVE), &nameable);
+    if more.is_empty() && fewest.is_none() {
+        let near_cell = |cell| near(&Hint { target: Some(Target { cell, verdict: Verdict::Safe }), ..Hint::nothing() });
+        more = logic::deep(v, &cs, flags, &nameable, &near_cell);
+    }
+    more.retain(|s| !wrong.iter().chain(&right).any(|h| h.target.is_some_and(|t| t.cell == s.cell) && h.numbers.len() <= s.cons.len()));
+    let mut wrong: Vec<(Hint, Option<usize>)> = wrong.into_iter().map(|h| (h, None)).collect();
+    let mut right: Vec<(Hint, Option<usize>)> = right.into_iter().map(|h| (h, None)).collect();
+    for (k, s) in more.iter().enumerate() {
+        let verdict = match (flags[s.cell], s.mine) {
+            (true, false) => Verdict::WrongFlag,
+            (_, true) => Verdict::Mine,
+            (false, false) => Verdict::Safe,
+        };
+        let shell = Hint { technique: Technique::Chain, numbers: s.numbers(), target: Some(Target { cell: s.cell, verdict }), steps: Vec::new() };
+        if verdict == Verdict::WrongFlag { &mut wrong } else { &mut right }.push((shell, Some(k)));
+    }
+    if wrong.is_empty() {
+        wrong = contradictions(v, flags).into_iter().map(|h| (h, None)).collect();
+    }
+    let chosen = wrong.into_iter().min_by_key(|(h, _)| (h.numbers.len(), near(h), h.target.map(|t| t.cell), h.numbers.clone())).or_else(|| {
+        right.into_iter().min_by_key(|(h, _)| {
+            let mine = h.target.is_some_and(|t| t.verdict == Verdict::Mine);
+            (h.numbers.len(), !h.technique.named(), mine, near(h), h.target.map(|t| t.cell), h.numbers.clone())
+        })
+    });
+    match chosen {
+        None => Hint::nothing(),
+        Some((h, None)) => h,
+        Some((h, Some(k))) => {
+            let (technique, numbers, mut steps) = logic::explain(v, &more[k]);
+            let target = h.target.expect("a cell");
+            if target.verdict == Verdict::WrongFlag {
+                steps.push(Step::FlagWrong { cell: target.cell });
+                return Hint { technique: Technique::WrongFlag, numbers, target: Some(target), steps };
+            }
+            Hint { technique, numbers, target: Some(target), steps }
+        }
+    }
+}
+
+/// The hints the deductions `found` give, as (wrong flags, the rest). A flag on a proven
+/// mine needs no hint.
+fn named(v: &View, flags: &[bool], found: &[Found]) -> (Vec<Hint>, Vec<Hint>) {
     let mut wrong = Vec::new();
     let mut right = Vec::new();
-    for d in &found {
+    for d in found {
         for &cell in &d.cells {
             if v.open[cell].is_some() {
                 continue;
@@ -196,20 +279,7 @@ pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
             }
         }
     }
-    if wrong.is_empty() {
-        wrong = contradictions(v, flags);
-    }
-    let near = |h: &Hint| distance(v, h, last);
-    if let Some(h) = wrong.into_iter().min_by_key(|h| (h.numbers.len(), near(h), h.target.map(|t| t.cell), h.numbers.clone())) {
-        return h;
-    }
-    right
-        .into_iter()
-        .min_by_key(|h| {
-            let mine = h.target.is_some_and(|t| t.verdict == Verdict::Mine);
-            (!h.technique.named(), h.numbers.len(), mine, near(h), h.target.map(|t| t.cell), h.numbers.clone())
-        })
-        .unwrap_or_else(Hint::nothing)
+    (wrong, right)
 }
 
 /// How far the hint's cells and numbers are from the last move (squared, in cells).

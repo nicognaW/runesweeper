@@ -25,6 +25,9 @@ pub fn name(t: Technique, lang: Lang) -> &'static str {
         Technique::Pattern(Pattern::OneTwo) => S::TechOneTwo,
         Technique::Reduction(Pattern::OneOne) => S::TechReductionOneOne,
         Technique::Reduction(Pattern::OneTwo) => S::TechReductionOneTwo,
+        Technique::Chain => S::TechChain,
+        Technique::Suppose => S::TechSuppose,
+        Technique::Count => S::TechCount,
         Technique::Nothing => S::TechNothing,
     }
     .get(lang)
@@ -49,6 +52,9 @@ pub fn nudge(h: &Hint, lang: Lang) -> &'static str {
         Technique::Pattern(Pattern::OneOne) => S::NudgeOneOne,
         Technique::Pattern(Pattern::OneTwo) => S::NudgeOneTwo,
         Technique::Reduction(_) => S::NudgeReduction,
+        Technique::Chain => S::NudgeChain,
+        Technique::Suppose => S::NudgeSuppose,
+        Technique::Count => S::NudgeCount,
         Technique::Nothing => S::NudgeNothing,
     }
     .get(lang)
@@ -91,9 +97,21 @@ fn step(s: &Step, last: bool, lang: Lang) -> String {
             Bound::AtLeast(k) => S::StepAtLeast.fill(lang, &[&n, &mines(lang, need), &self::cells(lang, own), &other_n, &mines(lang, k)]),
             Bound::AtMost(k) => S::StepAtMost.fill(lang, &[&n, &mines(lang, need), &other_n, &mines(lang, k)]),
         },
-        Step::Rest { n, need, mine: false, .. } => S::StepRestSafe.fill(lang, &[&n, &mines(lang, need)]),
-        Step::Rest { n, need, held, mine: true, .. } => S::StepRestMine.fill(lang, &[&n, &mines(lang, need), &mines(lang, held)]),
+        Step::Rest { n, need, mine: false, .. } => (if last { S::StepRestSafe } else { S::StepRestSafes }).fill(lang, &[&n, &mines(lang, need)]),
+        Step::Rest { n, need, held, mine: true, .. } => (if last { S::StepRestMine } else { S::StepRestMines }).fill(lang, &[&n, &mines(lang, need), &mines(lang, held)]),
         Step::Contradiction { .. } => S::StepContradiction.get(lang).to_string(),
         Step::FlagWrong { .. } => S::StepFlagWrong.get(lang).to_string(),
+        Step::Now { n, need, ref cells, mine: true, .. } => (if last { S::StepNowMine } else if cells.len() == 1 { S::StepNowMine1 } else { S::StepNowMines }).fill(lang, &[&n, &mines(lang, need), &self::cells(lang, cells.len())]),
+        Step::Now { n, mine: false, .. } => (if last { S::StepNowSafe } else { S::StepNowSafes }).fill(lang, &[&n, &mines(lang, n as usize)]),
+        Step::Suppose { mine, .. } => if mine { S::StepSupposeMine } else { S::StepSupposeSafe }.get(lang).to_string(),
+        Step::Broken { n, over, .. } => if over { S::StepBrokenOver } else { S::StepBrokenUnder }.fill(lang, &[&n]),
+        Step::NoRoom { count } => if count { S::StepNoRoomCount } else { S::StepNoRoom }.get(lang).to_string(),
+        Step::So { mine } => if mine { S::StepSoMine } else { S::StepSoSafe }.get(lang).to_string(),
+        Step::CountAll { left: 0, .. } => S::StepCountNone.get(lang).to_string(),
+        Step::CountAll { left, numbers } => if numbers == 1 { S::StepCountAll1 } else { S::StepCountAll }.fill(lang, &[&mines(lang, left)]),
+        Step::CountRest { numbers: 0, .. } => S::StepCountEvery.get(lang).to_string(),
+        Step::CountRest { left, held, numbers } => if numbers == 1 { S::StepCountRest1 } else { S::StepCountRest }.fill(lang, &[&mines(lang, left), &mines(lang, held)]),
+        Step::CountOver { need, left } => S::StepCountOver.fill(lang, &[&mines(lang, need), &mines(lang, left)]),
+        Step::CountUnder { most, left } => S::StepCountUnder.fill(lang, &[&mines(lang, most), &mines(lang, left)]),
     }
 }
