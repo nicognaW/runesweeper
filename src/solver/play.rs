@@ -79,8 +79,9 @@ pub fn walk(game: &Game, first: usize) -> Walk {
     let mut facts = vec![Fact::Unknown; game.w * game.h];
     let mut fifty_fifties = Vec::new();
     game.open(first);
+    let mut v = View::of(&game);
     while game.status == Status::Playing {
-        let v = View::of(&game);
+        v.refresh(&game);
         let proofs = deduce(&v, &facts, Strength::Full);
         if !proofs.is_empty() {
             for p in proofs {

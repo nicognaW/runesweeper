@@ -69,6 +69,7 @@ strings! {
     Classic: "Classic", "原版";
     GentleNoGuess: "Gentle No Guess", "简单无猜";
     NoGuess: "No Guess", "无猜";
+    MaxGuess: "Max Guess", "死猜挑战";
     // Levels.
     Beginner: "Beginner", "初级";
     Intermediate: "Intermediate", "中级";
@@ -119,6 +120,7 @@ impl S {
             Mode::Classic => S::Classic,
             Mode::GentleNoGuess => S::GentleNoGuess,
             Mode::NoGuess => S::NoGuess,
+            Mode::MaxGuess => S::MaxGuess,
         }
     }
 

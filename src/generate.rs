@@ -11,6 +11,9 @@
 use crate::game::{Game, Mode, Rng};
 use crate::solver::{Strength, play};
 
+mod max_guess;
+pub use max_guess::{MaxGuess, Search, budget, max_guess, searched};
+
 /// Columns, rows, mines.
 pub type Dims = (usize, usize, usize);
 
@@ -27,6 +30,10 @@ pub fn lay_counting(mode: Mode, (w, h, mines): Dims, seed: u64, first: usize) ->
         Mode::Classic => (Game::new(w, h, mines, Rng::new(seed as u32)), 1),
         Mode::GentleNoGuess => redraw_until_clear(w, h, mines, seed, first, Strength::Gentle),
         Mode::NoGuess => redraw_until_clear(w, h, mines, seed, first, Strength::Full),
+        Mode::MaxGuess => {
+            let laid = max_guess((w, h, mines), seed, first);
+            (laid.game, laid.steps)
+        }
     }
 }
 
@@ -71,7 +78,7 @@ impl Stream {
     }
 
     /// `k` distinct items of `from`, every choice equally likely.
-    fn pick(&mut self, from: &[usize], k: usize) -> Vec<usize> {
+    pub(crate) fn pick(&mut self, from: &[usize], k: usize) -> Vec<usize> {
         let mut v = from.to_vec();
         for i in 0..k {
             let j = i + self.below(v.len() - i);

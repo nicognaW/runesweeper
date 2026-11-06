@@ -159,7 +159,7 @@ fn gentle_no_guess_sits_between_classic_and_no_guess_and_is_saved_and_shown() {
     let x = |rt: &rune::Runtime<App>, k: &str| rt.find(k).unwrap_or_else(|| panic!("no {k}")).0;
     let (classic, gentle, full) = (x(&rt, "mode-classic"), x(&rt, "mode-gentle-no-guess"), x(&rt, "mode-no-guess"));
     assert!(classic < gentle && gentle < full, "Classic, Gentle No Guess, No Guess: {classic} {gentle} {full}");
-    assert_eq!(text_in(&rt, "modes"), "Classic Gentle No Guess No Guess");
+    assert_eq!(text_in(&rt, "modes"), "Classic Gentle No Guess No Guess Max Guess");
     click(&mut rt, "mode-gentle-no-guess");
     settle(&mut rt);
     assert_eq!(rt.state.mode, Mode::GentleNoGuess);
