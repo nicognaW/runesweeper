@@ -147,7 +147,7 @@ fn a_provably_wrong_flag_is_reported_first() {
     let h = p.hint(Some((4, 1)));
     assert_eq!(h.technique, Technique::WrongFlag);
     assert_eq!(target(&h), (p.at(2, 0), Verdict::WrongFlag));
-    assert_eq!(h.target.unwrap().verdict.action(), Action::Unflag);
+    assert_eq!(h.target.unwrap().verdict.action(), Some(Action::Unflag));
     let words = en(&h);
     assert_eq!(words.last().unwrap(), "The flag on it is wrong.");
     assert_eq!(zh(&h).last().unwrap(), "所以这面旗插错了。");
@@ -270,7 +270,7 @@ fn every_hint_on_real_fields_is_true_and_never_gives_odds() {
                     assert!(!g.cells[t.cell].mine, "{h:?}");
                     g.open(t.cell);
                 }
-                Verdict::WrongFlag => panic!("no wrong flags here"),
+                Verdict::WrongFlag | Verdict::Guess | Verdict::Avoid => panic!("no wrong flags or guesses here"),
             }
         }
     }

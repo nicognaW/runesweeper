@@ -212,15 +212,18 @@ mod tests {
     }
 
     #[test]
-    fn a_cell_beside_a_corner_pair_is_safe_or_half_of_a_fifty_fifty() {
-        //   x y * . .     The 1s below see x and y alike; z, seen by y alone, is a mine
-        //   * z . . .     whenever x is, so then x and y can never be told apart.
-        //   . . . . o
-        let g = opened(&["#**..", "**...", "....o"]);
+    fn a_cell_that_is_safe_or_half_of_a_fifty_fifty_is_a_pseudo_one() {
+        //   . x . #     x and y see the same open numbers. Were x a mine, y would be safe
+        //   * y # *     and the three cells below y, which x doesn't touch, would all be
+        //   * * # .     mines: x and y would be a true 50/50.
+        let mut g = Game::with_mines(4, 3, &[4, 7, 8, 9]);
+        for i in [0, 2, 11] {
+            g.cells[i].cover = crate::game::Cover::Open;
+        }
         let v = View::of(&g);
         let facts = vec![Fact::Unknown; v.len()];
         assert!(fifty_fifties(&v, &facts).is_empty());
-        assert!(pseudo(&v, &facts).contains(&(0, 1)), "{:?}", pseudo(&v, &facts));
+        assert_eq!(pseudo(&v, &facts).iter().find(|&&(x, _)| x == 1), Some(&(1, 5)), "{:?}", pseudo(&v, &facts));
     }
 
     #[test]

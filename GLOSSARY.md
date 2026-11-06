@@ -48,6 +48,14 @@ A position where no hidden cell can be proven safe, so the player must risk a ce
 A forced guess between two cells that no future information can ever tell apart, each a mine with equal chance.
 _Avoid_: Coin flip
 
+**Pseudo-50/50**:
+A cell that is either safe or half of a true 50/50, so guessing it at once costs nothing.
+_Avoid_: Fake 50/50
+
+**Dead cell**:
+A cell that, if safe, can show only one number, so opening it settles nothing and another guess follows.
+_Avoid_: Useless cell
+
 ## Help
 
 **Hint**:
