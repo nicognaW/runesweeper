@@ -114,6 +114,53 @@ strings! {
     Seconds: "{} s", "{} 秒";
     Bv3Clicks: "3BV {}/{} · {} clicks", "3BV {}/{} · 点击 {} 次";
     ForcedGuesses: "{} forced, {} survived", "必须猜 {} 次，猜对 {} 次";
+    Assisted1: "Assisted, 1 hint", "使用提示 1 次";
+    Assisted: "Assisted, {} hints", "使用提示 {} 次";
+    // Hints (ADR 0002: reasons a player can check by hand, never a probability). The zh-CN
+    // sentences follow the tutorials' 「看这个 N，它周围还有 M 个雷……所以这一格必定安全」.
+    Hint: "Hint", "提示";
+    HintApply: "Apply", "执行";
+    HintClose: "Close", "关闭";
+    Easy: "Easy", "简单";
+    Medium: "Medium", "中等";
+    Hard: "Hard", "困难";
+    Evil: "Evil", "地狱";
+    CountMine1: "1 mine", "1 个雷";
+    CountMines: "{} mines", "{} 个雷";
+    CountCell1: "1 hidden cell", "1 格";
+    CountCells: "{} hidden cells", "{} 格";
+    TechWrongFlag: "Wrong flag", "旗插错了";
+    TechSingle: "Single number", "单数字判雷";
+    TechSatisfied: "Satisfied number", "单数字判空";
+    TechOneOne: "1-1 pattern", "11定式";
+    TechOneTwo: "1-2 pattern", "12定式";
+    TechReductionOneOne: "Reduction to a 1-1", "减雷变11定式";
+    TechReductionOneTwo: "Reduction to a 1-2", "减雷变12定式";
+    TechNothing: "No simple step", "没有简单推理";
+    NudgeWrongFlag: "One of your flags can't be right.", "有一面旗插错了。";
+    NudgeSingle: "Look for a number with only as many hidden cells as it needs.", "找一个周围只剩下对应数量格子的数字。";
+    NudgeSatisfied: "Look for a number that already has all its mines.", "找一个周围的雷已经够数的数字。";
+    NudgeOneOne: "Compare two numbers that share hidden cells.", "比较两个共用格子的数字，找 11定式。";
+    NudgeOneTwo: "Compare two numbers that share hidden cells, and their difference.", "比较两个共用格子的数字，找 12定式。";
+    NudgeReduction: "Subtract the mines you can prove, then compare two numbers.", "先减雷，再比较两个数字。";
+    NudgeNothing: "No one or two numbers settle any cell right now.", "现在没有只靠一两个数字就能确定的格子。";
+    LookOne: "Look at this number.", "看这个数字。";
+    LookMany: "Look at these numbers.", "看这几个数字。";
+    CellSafe: "This cell is safe.", "这一格必定安全。";
+    CellMine: "This cell is a mine.", "这一格必须是雷。";
+    CellWrongFlag: "This flag is wrong: the cell is safe.", "这面旗插错了：这一格是安全的。";
+    StepSingle: "This {} still needs {} and touches only {}, so this cell must be a mine.", "看这个 {}，它周围还有 {}，只剩下 {}……所以这一格必须是雷。";
+    StepProver1: "First, this {} touches only one hidden cell, so that cell is a mine.", "先看这个 {}，它周围只剩下 1 格，所以那一格是雷。";
+    StepProver: "First, this {} touches only {}, so they are all mines.", "先看这个 {}，它周围只剩下 {}，所以这些格子全是雷。";
+    StepSatisfied: "Then this {} already has its {}, so this cell must be safe.", "再看这个 {}，它周围的 {}已经有了……所以这一格必定安全。";
+    StepReduced: "This {} touches {} of those, so it acts like a {}.", "这个 {} 挨着其中 {}，减雷后它实际上是 {}。";
+    StepExactly: "This {} still needs {}, and every hidden cell around it also touches that {}, so the shared cells hold exactly {}.", "看这个 {}，它周围还有 {}，这些格子都挨着那个 {}，所以共用的格子里恰好有 {}。";
+    StepAtLeast: "This {} still needs {} but has only {} of its own, so the cells it shares with that {} hold at least {}.", "看这个 {}，它周围还有 {}，不共用的只有 {}，所以和那个 {} 共用的格子里最少有 {}。";
+    StepAtMost: "This {} still needs {}, so the cells it shares with that {} hold at most {}.", "看这个 {}，它周围还有 {}，所以和那个 {} 共用的格子里最多只能有 {}。";
+    StepRestSafe: "That {} still needs {}, no more than the shared cells hold, so this cell must be safe.", "再看那个 {}，它周围还有 {}，已经在共用的格子里了……所以这一格必定安全。";
+    StepRestMine: "That {} still needs {}, but the shared cells hold at most {}, so the cells it doesn't share hold the rest: this cell must be a mine.", "再看那个 {}，它周围还有 {}，共用的格子里最多只有 {}，剩下的雷只能在不共用的格子里……所以这一格必须是雷。";
+    StepContradiction: "If this flagged cell were a mine, these numbers could not all be right, so it must be safe.", "假设这一格是雷，这些数字就不可能都对……所以这一格必定安全。";
+    StepFlagWrong: "The flag on it is wrong.", "所以这面旗插错了。";
 }
 
 impl S {

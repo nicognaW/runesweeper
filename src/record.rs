@@ -99,7 +99,7 @@ pub struct Record {
     pub left: u32,
     pub right: u32,
     pub chords: u32,
-    /// Hints shown (none until hints exist).
+    /// Hints shown: any makes it an assisted game.
     pub hints: u32,
     /// Cells opened when no hidden cell could be proven safe, the first click excluded.
     pub forced: u32,
@@ -129,6 +129,11 @@ impl Record {
             layout: Layout::Mines(Vec::new()),
             moves: Vec::new(),
         }
+    }
+
+    /// A game in which at least one Hint was shown.
+    pub fn assisted(&self) -> bool {
+        self.hints > 0
     }
 
     /// The Level these dims are: a standard one, or Custom.

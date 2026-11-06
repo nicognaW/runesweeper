@@ -217,6 +217,8 @@ pub fn view(s: &App, reduced: bool) -> El {
                 .inert(),
         );
     }
+    // The hint's numbers and cell, ringed.
+    board = board.children(crate::callout::rings(s, &p));
     // The selector sits on the cell under the pointer, without re-running the view.
     board = board.child(
         el().key("selector")

@@ -86,6 +86,9 @@ fn detail(s: &App, r: &Record) -> String {
     if r.forced > 0 {
         parts.push(s.trf(S::ForcedGuesses, &[&r.forced, &r.survived]));
     }
+    if r.assisted() {
+        parts.push(if r.hints == 1 { s.tr(S::Assisted1).to_string() } else { s.trf(S::Assisted, &[&r.hints]) });
+    }
     if r.level() == Level::Custom {
         parts.push(sizes(r.dims));
     }

@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx, Waker};
 
+use crate::callout::Shown;
 use crate::game::{Cover, Game, Level, Mode, Outcome, Rng, Status, clamp_custom};
 use crate::generate::{self, Stream};
 use crate::generating::{self, Generating, Lay};
@@ -123,6 +124,8 @@ pub struct App {
     pub history_filter: (Mode, Level),
     /// Minutes from UTC to the player's clock, for History's dates.
     pub utc_offset: i64,
+    /// The Hint on screen and how far into it the player has stepped. Any move clears it.
+    pub hint: Option<Shown>,
     /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
     pub banner_done: bool,
     /// The shockwave has run; its full-window backdrop copy can go.
@@ -201,6 +204,7 @@ impl App {
             record_t0: None,
             history_filter: (Mode::Classic, level),
             utc_offset: storage::utc_offset_minutes(),
+            hint: None,
             banner_done: false,
             shock_done: false,
             edit_w: TextEdit::new(""),
@@ -328,6 +332,7 @@ impl App {
 
     fn fresh_field(&mut self) {
         self.abandon();
+        self.hint = None;
         self.lay_new_field();
         self.field += 1;
         self.started_at = None;
@@ -413,6 +418,8 @@ impl App {
 
     /// Adds a click to the game in play's record.
     fn note(&mut self, act: Act, cell: usize) {
+        // Any move starts the next hint afresh.
+        self.hint = None;
         let t0 = *self.record_t0.get_or_insert(self.now);
         if self.record.moves.is_empty() {
             self.record.at = storage::unix_ms();
@@ -433,7 +440,7 @@ impl App {
     }
 
     /// Keeps the game in play, so closing the window or tab still records it.
-    fn keep_draft(&self) {
+    pub(crate) fn keep_draft(&self) {
         if self.game.started && !self.game.over() {
             storage::save_draft(Some(&self.record_now(End::Abandoned)));
         }
@@ -487,7 +494,7 @@ impl App {
         self.hover_on.set(if shown { 1.0 } else { 0.0 });
     }
 
-    fn release_at(&mut self, chord: bool, i: usize) {
+    pub(crate) fn release_at(&mut self, chord: bool, i: usize) {
         if self.game.over() {
             return;
         }
@@ -770,6 +777,12 @@ impl App {
                 self.mark_at(i);
                 true
             }
+            // H steps one stage deeper into a hint, at once (keys never animate).
+            Key::Text(t) if plain && t.eq_ignore_ascii_case("h") => {
+                self.press_hint();
+                tx.instant();
+                true
+            }
             Key::Function(2) => {
                 self.new_game_now();
                 // A key swaps the field in one frame: no deal, no fade of the old one.
@@ -780,6 +793,11 @@ impl App {
             // A key closes the panel in one frame: keys never animate.
             Key::Escape if self.panel.is_some() => {
                 self.panel = None;
+                tx.instant();
+                true
+            }
+            Key::Escape if self.hint.is_some() => {
+                self.hint = None;
                 tx.instant();
                 true
             }
