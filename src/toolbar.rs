@@ -1,11 +1,12 @@
 //! The slim toolbar over the console and the panels it opens: the Level picker (Custom's sizes
-//! inline) and Settings. Panels are infrequent, so they slide in; a key closes one at once.
+//! inline), History and Settings. Panels are infrequent, so they slide in; a key closes one at once.
 
 use rune::{Align, El, Icon, Side, Spring, Transition, col, el, icon, row, spacer, text};
 use rune_kit::{Kit, Switch, TextInput};
 use rune_motion::SpringPair;
 
 use crate::app::{App, Panel};
+use crate::history;
 use crate::game::{Level, Mode};
 use crate::icons::flag;
 use crate::strings::{Lang, S};
@@ -23,9 +24,9 @@ static CHEVRON: Icon = Icon {
     body: r#"<path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
-const LEVELS: [Level; 4] = [Level::Beginner, Level::Intermediate, Level::Expert, Level::Custom];
+pub(crate) const LEVELS: [Level; 4] = [Level::Beginner, Level::Intermediate, Level::Expert, Level::Custom];
 
-fn level_key(l: Level) -> &'static str {
+pub(crate) fn level_key(l: Level) -> &'static str {
     match l {
         Level::Beginner => "pick-beginner",
         Level::Intermediate => "pick-intermediate",
@@ -34,12 +35,12 @@ fn level_key(l: Level) -> &'static str {
     }
 }
 
-fn sizes((w, h, m): (usize, usize, usize)) -> String {
+pub(crate) fn sizes((w, h, m): (usize, usize, usize)) -> String {
     format!("{w} × {h} · {m}")
 }
 
 /// A recessed well, as the header's: the toolbar's controls and the panels' rows sit in these.
-fn well(e: El) -> El {
+pub(crate) fn well(e: El) -> El {
     e.fill(ca(0x000000, 0.25)).box_shadow(inset(1.0, 4.0, ca(0x000000, 0.6))).box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.05)))
 }
 
@@ -84,6 +85,11 @@ fn tools(s: &App, p: &Palette) -> Vec<El> {
         v.push(flag_toggle(s, p));
     }
     v.push(
+        tool("history-button", s.tr(S::History), icon(&history::HISTORY, 16.0).color(p.text), p)
+            .expanded(s.panel == Some(Panel::History))
+            .on_press(|s: &mut App| s.toggle_panel(Panel::History)),
+    );
+    v.push(
         tool("settings-button", s.tr(S::Settings), icon(&SETTINGS, 16.0).color(p.text), p)
             .expanded(s.panel == Some(Panel::Settings))
             .on_press(|s: &mut App| s.toggle_panel(Panel::Settings)),
@@ -96,7 +102,7 @@ pub fn toolbar(s: &App, p: &Palette) -> El {
 }
 
 /// A panel's surface, styled like the console it drops from, anchored under its button.
-fn surface(key: &str, label: &str, anchor: &str, align: Align, body: El, p: &Palette) -> El {
+pub(crate) fn surface(key: &str, label: &str, anchor: &str, align: Align, body: El, p: &Palette) -> El {
     let slide = Transition::offset(0.0, -10.0).combined(Transition::opacity()).springs(SpringPair::new(Spring::new(0.22, 0.0), Spring::new(0.16, 0.0)));
     col()
         .key(key)
@@ -115,7 +121,7 @@ fn surface(key: &str, label: &str, anchor: &str, align: Align, body: El, p: &Pal
 }
 
 /// One row of a panel: a well that lights its edge when it is the current choice.
-fn choice(key: &str, on: bool, p: &Palette) -> El {
+pub(crate) fn choice(key: &str, on: bool, p: &Palette) -> El {
     let r = well(row().key(key).w_full().h(40.0).px(12.0).gap(8.0).radius(10.0)).center_y().focusable(true).hover(p.tile_hover);
     if on { r.border(1.0, p.accent.alpha(0.8)) } else { r }
 }
@@ -236,6 +242,7 @@ pub fn panels(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) {
     layer.push(rune_kit::scrim("panel-scrim", |s: &mut App| s.close_panel()));
     layer.push(match open {
         Panel::Picker => picker(s, k, p),
+        Panel::History => history::panel(s, p),
         Panel::Settings => settings(s, k, p),
     });
 }
