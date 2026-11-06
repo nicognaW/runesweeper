@@ -6,7 +6,10 @@
 //! XP's first-click relocation. The bot plays every proof, then the cell least likely to be
 //! a mine under uniform odds (it does not model the relocation's bias toward the top left).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+// The browser's clock on the web, so the benchmark runs there too.
+use rune::time::Instant;
 
 use super::play;
 use crate::game::{Game, Mode, Rng};
@@ -110,6 +113,16 @@ pub fn no_guess((w, h, mines): (usize, usize, usize), fields: u64, seed: u64) ->
     }
     t.times.sort();
     t
+}
+
+/// No Guess generation on the web, as [`no_guess`] measures it natively: `[fields, uniform
+/// fields drawn, p50 ms, p99 ms, max ms]`. `scripts/wasm-bench.mjs` runs it under Node.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn bench_no_guess(w: usize, h: usize, mines: usize, fields: u32, seed: u64) -> Vec<f64> {
+    let g = no_guess((w, h, mines), fields as u64, seed);
+    let ms = |q: f64| g.percentile(q).as_secs_f64() * 1000.0;
+    vec![g.fields as f64, g.attempts as f64, ms(0.5), ms(0.99), ms(1.0)]
 }
 
 /// The 95% Wilson score interval for `wins` out of `games`, as fractions.
