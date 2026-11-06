@@ -44,10 +44,6 @@ impl Press {
 /// What the effects need to know about the last few moves.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Moments {
-    /// The deal of a new field (time).
-    pub dealt: f64,
-    /// The last opening: time and field point.
-    pub opened: Option<(f64, [f32; 2])>,
     /// The explosion: time and field point.
     pub boom: Option<(f64, [f32; 2])>,
     pub won: Option<f64>,
@@ -76,12 +72,8 @@ pub struct App {
     /// XYZZY, then Shift+Enter: the corner pixel tells mine from safe under the pointer.
     pub xyzzy: usize,
     pub cheat: bool,
-    /// Where the face looks: toward the pointer, in face points.
-    pub gaze: Live<[f32; 2]>,
-    /// The console is knocked sideways for a moment by a blast.
-    pub shake: bool,
-    /// The last input (app clock): effects drift to a stop when nobody is playing.
-    pub last_input: f64,
+    /// Whether this field deals its tiles in (not when a key asked for it).
+    pub deal: bool,
     /// The last win beat the level's best time.
     pub new_best: bool,
     /// Draw the app icon instead of the game (the `icon` scene).
@@ -121,9 +113,7 @@ impl App {
             xyzzy: 0,
             cheat: false,
             icon: false,
-            gaze: Live::new([0.0, 0.0]),
-            shake: false,
-            last_input: 0.0,
+            deal: true,
             new_best: false,
             edit_w: TextEdit::new(""),
             edit_h: TextEdit::new(""),
@@ -137,16 +127,25 @@ impl App {
     }
 
     pub fn new_game(&mut self) {
+        self.deal = true;
+        self.fresh_field();
+    }
+
+    /// A new field from the keyboard (F2, Cmd/Ctrl+N): it's there at once.
+    pub fn new_game_now(&mut self) {
+        self.deal = false;
+        self.fresh_field();
+    }
+
+    fn fresh_field(&mut self) {
         let (w, h, m) = self.dims();
         self.game = Game::new(w, h, m, storage::seed() ^ self.field as u64);
         self.field += 1;
         self.started_at = None;
         self.seconds = 0;
         self.press = Press::default();
-        self.shake = false;
         self.new_best = false;
-        self.touch();
-        self.moments = Moments { dealt: self.now, ..Moments::default() };
+        self.moments = Moments::default();
     }
 
     pub fn set_level(&mut self, level: Level, tx: &mut Tx) {
@@ -200,17 +199,13 @@ impl App {
     fn release_at(&mut self, chord: bool, i: usize) {
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
         self.start_clock();
-        let at = self.cell_center(i);
         match out {
-            Outcome::Nothing => {}
-            Outcome::Opened(_) => self.moments.opened = Some((self.now, at)),
+            Outcome::Nothing | Outcome::Opened(_) => {}
             Outcome::Lost(m) => {
                 self.moments.boom = Some((self.now, self.cell_center(m)));
                 self.started_at = None;
-                self.shake = true;
             }
             Outcome::Won => {
-                self.moments.opened = Some((self.now, at));
                 self.moments.won = Some(self.now);
                 self.started_at = None;
                 self.record();
@@ -270,7 +265,6 @@ impl App {
 
     pub fn on_board_drag(&mut self, d: &rune::Drag, button: rune::PointerButton, tx: &mut Tx) {
         let cell = self.cell_at(d.x, d.y);
-        self.touch();
         match d.phase {
             rune::Phase::Down => {
                 if self.game.over() {
@@ -296,16 +290,12 @@ impl App {
                 self.press = Press { right: self.press.right && !chord, ..Press::default() };
                 if any && !d.cancelled() {
                     self.release(chord, cell);
-                    if self.shake {
-                        tx.wake_after(Duration::from_millis(50));
-                    }
                 }
             }
         }
     }
 
     pub fn on_board_secondary(&mut self, x: f32, y: f32, _tx: &mut Tx) {
-        self.touch();
         if self.game.over() {
             return;
         }
@@ -321,23 +311,14 @@ impl App {
 
     /// Moves the selector (without re-running the view unless the cheat needs the cell).
     pub fn hover(&mut self, cell: Option<usize>, tx: &mut Tx) {
-        self.touch();
         match cell {
             Some(i) => {
                 let (x, y) = (i % self.game.w, i / self.game.w);
-                // The face sits centred above the field: look from there toward the cell.
-                let bw = self.game.w as f32 * PITCH - crate::style::GAP + 2.0 * WELL;
-                let c = self.cell_center(i);
-                let (dx, dy) = (c[0] - bw / 2.0, c[1] + 12.0 + crate::style::HEADER_H / 2.0);
-                let len = (dx * dx + dy * dy).sqrt().max(1.0);
-                let k = (len / 120.0).min(1.0) * 2.4;
-                self.gaze.set([dx / len * k, dy / len * k]);
                 self.hover_at.set([WELL + x as f32 * PITCH, WELL + y as f32 * PITCH]);
                 self.hover_on.set(if self.game.cells[i].cover == Cover::Open || self.game.over() { 0.0 } else { 1.0 });
             }
             None => {
                 self.hover_on.set(0.0);
-                self.gaze.set([0.0, 0.0]);
             }
         }
         if self.cheat && self.hover_cell != cell {
@@ -348,20 +329,8 @@ impl App {
         }
     }
 
-    /// Marks input; the next tick stamps it with the clock (handlers may run on a stale `now`).
-    pub fn touch(&mut self) {
-        self.last_input = f64::MAX;
-    }
-
     pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.now = now;
-        if self.last_input == f64::MAX {
-            self.last_input = now;
-        }
-        if self.shake && self.moments.boom.is_some_and(|(t, _)| now - t > 0.04) {
-            self.shake = false;
-            return true;
-        }
         let Some(t0) = self.started_at else { return false };
         if self.game.status != Status::Playing {
             return false;
@@ -377,10 +346,9 @@ impl App {
     }
 
     pub fn key(&mut self, e: &KeyEvent, tx: &mut Tx) -> bool {
-        self.touch();
         match &e.key {
             Key::Function(2) => {
-                self.new_game();
+                self.new_game_now();
                 true
             }
             Key::Escape if self.menu.is_some() => {
@@ -403,7 +371,7 @@ impl App {
                 true
             }
             Key::Command('n') => {
-                self.new_game();
+                self.new_game_now();
                 true
             }
             Key::Command('q') | Key::Command('w') => {

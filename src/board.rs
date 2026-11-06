@@ -16,11 +16,13 @@ const VANISH: &[Beat] = &[Beat::new(0.0), Beat::new(0.06).scale(1.08), Beat::new
 /// What was under it popping up.
 const POP: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.35), Beat::new(0.17).scale(1.18), Beat::new(0.3)];
 /// A new field dealing its tiles in.
-const DEAL: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.26).scale(1.06), Beat::new(0.38)];
+const DEAL: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.17).scale(1.06), Beat::new(0.25)];
 /// The win: a swell that runs across the field.
 const WAVE: &[Beat] = &[Beat::new(0.0), Beat::new(0.14).scale(1.22), Beat::new(0.36)];
+/// Fades on frequent surfaces: 150 ms in and out.
+const QUICK: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.15, 0.0));
 /// A mine going off: the flash behind it.
-const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.08).scale(1.35), Beat::new(0.5).opacity(0.3).scale(1.0)];
+const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.06).scale(1.35), Beat::new(0.3).opacity(0.3).scale(1.0)];
 
 pub fn size(s: &App) -> (f32, f32) {
     (s.game.w as f32 * PITCH - GAP + 2.0 * WELL, s.game.h as f32 * PITCH - GAP + 2.0 * WELL)
@@ -91,10 +93,10 @@ pub fn view(s: &App, reduced: bool) -> El {
     let (cx, cy) = (g.w as f32 / 2.0, g.h as f32 / 2.0);
     let deal = |i: usize| {
         let (x, y) = ((i % g.w) as f32 + 0.5 - cx, (i / g.w) as f32 + 0.5 - cy);
-        ((x * x + y * y).sqrt() * 0.025) as f64
+        ((x * x + y * y).sqrt() * 0.02).min(0.2) as f64
     };
-    let ripple = |i: usize| (g.cells[i].wave as f64 * 0.022).min(0.9);
-    let boom = |i: usize| if i == hit { 0.0 } else { (dist(i) as f64 * 0.045).min(1.4) + 0.15 };
+    let ripple = |i: usize| (g.cells[i].wave as f64 * 0.02).min(0.3);
+    let boom = |i: usize| if i == hit { 0.0 } else { (dist(i) as f64 * 0.03).min(0.3) + 0.05 };
     let wave = |i: usize| ((i % g.w + i / g.w) as f64 * 0.03 + 0.25).min(1.6);
     let light = |i: usize| 1.0 - ((i % g.w) as f32 / g.w as f32 * 0.6 + (i / g.w) as f32 / g.h as f32 * 0.4);
 
@@ -132,13 +134,7 @@ pub fn view(s: &App, reduced: bool) -> El {
                 cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, reduced).motion_intent(MotionIntent::BOUNCE));
             } else if c_.adj > 0 {
                 let n = number(c_.adj, &p).key(format!("n{f}-{i}"));
-                let n = if won && !fresh {
-                    with_seq(n, WAVE, wave(i), reduced)
-                } else if fresh {
-                    with_seq(n, POP, ripple(i) + 0.05, reduced)
-                } else {
-                    n
-                };
+                let n = if won && !fresh { with_seq(n, WAVE, wave(i), reduced) } else { n };
                 cell = cell.child(n.motion_intent(MotionIntent::BOUNCE));
             }
             opens.push(cell);
@@ -160,17 +156,15 @@ pub fn view(s: &App, reduced: bool) -> El {
             Cover::Flag => tile.child(
                 flag(TILE * 0.92, p.flag, p.pole())
                     .key(format!("f{f}-{i}"))
-                    .transition(Transition::scale(0.3).combined(Transition::offset(0.0, -8.0)))
-                    .motion_intent(MotionIntent::BOUNCE),
+                    .transition(Transition::opacity().springs(QUICK)),
             ),
-            Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::scale(0.5))),
+            Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::opacity().springs(QUICK))),
             _ => tile,
         };
-        let tile = if won { with_seq(tile, WAVE, wave(i), reduced) } else { with_seq(tile, DEAL, deal(i), reduced) };
+        let tile = if won { with_seq(tile, WAVE, wave(i), reduced) } else { with_seq(tile, DEAL, deal(i), reduced || !s.deal) };
         covers.push(tile.motion_intent(MotionIntent::BOUNCE));
     }
 
-    let (rt, rp) = s.moments.opened.map(|(t, at)| (t as f32, at)).unwrap_or((-100.0, [0.0, 0.0]));
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
     let mut board = el()
         .key("board")
@@ -198,24 +192,19 @@ pub fn view(s: &App, reduced: bool) -> El {
         .role("grid")
         .label("Minefield")
         .children(opens)
-        .child(effect(gfx::RIPPLE).key("ripple").effect_data([rp[0], rp[1], rt, if s.saved.color { 1.0 } else { 4.0 }]).absolute(0.0, 0.0).size(bw, bh).radius(12.0))
         .children(covers);
-    // The selector glides from cell to cell on a spring without re-running the view.
+    // The selector sits on the cell under the pointer, without re-running the view.
     board = board.child(
         el().key("selector")
             .absolute(0.0, 0.0)
             .size(TILE, TILE)
             .radius(5.0)
             .border(1.5, p.accent.alpha(0.9))
-            .live_offset(s.hover_at.smooth(Spring::new(0.22, 0.12)))
-            .live_opacity(s.hover_on.smooth(Spring::new(0.18, 0.0)))
+            .live_offset(&s.hover_at)
+            .live_opacity(s.hover_on.smooth(Spring::new(0.15, 0.0)))
             .inert()
             .child(effect(gfx::SELECT).effect_data([0.6, 0.0, 0.0, 0.0]).effect_bleed(12.0).absolute(0.0, 0.0).size(TILE, TILE).radius(5.0)),
     );
-    if lost {
-        let (x, y) = pos(s, hit);
-        board = board.child(effect(gfx::FIRE).key(format!("fire{f}")).effect_bleed(70.0).absolute(x + 2.0, y + 4.0).size(TILE - 4.0, TILE - 6.0).radius(4.0).inert());
-    }
     board = board.child(
         effect(gfx::SPARKLES)
             .key("burst")
@@ -236,9 +225,9 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32) -> Option<El> {
             format!("Cleared in {} second{}", s.seconds, if s.seconds == 1 { "" } else { "s" }),
             if s.new_best { format!("New best for {}", s.level.name()) } else { "F2 or the face for another".into() },
             c(0xffc531),
-            0.7,
+            0.3,
         ),
-        Status::Lost => ("Boom.".to_string(), "F2 or the face to try again".to_string(), c(0xff5c6c), 1.4),
+        Status::Lost => ("Boom.".to_string(), "F2 or the face to try again".to_string(), c(0xff5c6c), 0.35),
         _ => return None,
     };
     let w = (bw - 24.0).min(260.0);
@@ -260,7 +249,7 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32) -> Option<El> {
                     .child(text(sub).font(SMALL).color(p.muted)),
             )
             .enter_delay(delay)
-            .transition(Transition::scale(0.9).combined(Transition::offset(0.0, 10.0)))
+            .transition(Transition::opacity().springs(QUICK))
             .inert(),
     )
 }

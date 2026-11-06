@@ -1,11 +1,11 @@
 //! The window: menu bar, console (counters, face, field) and the dialogs.
 
-use rune::{Beat, Color, Cx, El, MotionIntent, Sequence, Spring, Transition, col, effect, el, row, spacer, text};
+use rune::{Cx, El, MotionIntent, col, effect, el, row, spacer, text};
 use rune_kit::{Button, ButtonVariant, Dialog as KitDialog, Kit, Menu as KitMenu, MenuItem, PaletteSeed, TextInput};
 
 use crate::app::{App, Dialog, Menu};
 use crate::game::{Level, Status};
-use crate::icons::{digit, face, led_text, pupil, pupils};
+use crate::icons::{digit, face, led_text};
 use crate::style::*;
 use crate::{board, gfx};
 
@@ -17,20 +17,10 @@ fn kit(p: &Palette) -> Kit {
 
 fn led(key: &str, v: i32, p: &Palette, color: bool) -> El {
     let (dw, dh) = (17.0, 30.0);
-    // Each place keeps its unlit segments still; the lit ones crossfade as the digit changes,
-    // like a real LED's quick decay.
-    let mut digits = row().gap(4.0);
-    for (n, ch) in led_text(v).chars().enumerate() {
-        digits = digits.child(
-            el().size(dw, dh)
-                .child(digit('8', dw, dh, Color::TRANSPARENT, p.led_off).absolute(0.0, 0.0))
-                .child(
-                    digit(ch, dw, dh, p.led_on, Color::TRANSPARENT)
-                        .key(format!("{key}-{n}-{ch}"))
-                        .absolute(0.0, 0.0)
-                        .transition(Transition::opacity().springs(rune_motion::SpringPair::new(Spring::new(0.08, 0.0), Spring::new(0.22, 0.0)))),
-                ),
-        );
+    // Digits change in the frame they change, as an LED does.
+    let mut digits = row().gap(4.0).motion_intent(MotionIntent::STEP);
+    for ch in led_text(v).chars() {
+        digits = digits.child(digit(ch, dw, dh, p.led_on, p.led_off));
     }
     let (w, h) = (3.0 * dw + 8.0 + 16.0, dh + 12.0);
     el().key(key)
@@ -50,7 +40,6 @@ fn face_button(s: &App, p: &Palette) -> El {
     let sz = 44.0;
     let mood = s.mood();
     let ink = c(0x1a1206);
-    let won = s.game.status == Status::Won;
     el().key("face")
         .size(sz + 8.0, sz + 8.0)
         .radius((sz + 8.0) / 2.0)
@@ -67,22 +56,9 @@ fn face_button(s: &App, p: &Palette) -> El {
                 .radius(sz / 2.0)
                 .box_shadow(drop(2.0, 6.0, ca(0x000000, 0.6)))
                 .child(effect(gfx::FACE).effect_data([if s.saved.color { 0.0 } else { 5.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(sz, sz).radius(sz / 2.0))
-                .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).transition(Transition::scale(0.85)))
-                .children(pupils(mood).then(|| {
-                    // The eyes follow the pointer around the field.
-                    el().key("eyes")
-                        .absolute(0.0, 0.0)
-                        .size(sz, sz)
-                        .live_offset(s.gaze.smooth(Spring::new(0.28, 0.1)))
-                        .child(pupil(sz, mood, false, ink))
-                        .child(pupil(sz, mood, true, ink))
-                        .transition(Transition::scale(0.85))
-                        .inert()
-                }))
-                .children(won.then(|| effect(gfx::SPARKLES).key("face-stars").effect_data([-1.0, 5.0, 6.0, 0.0]).effect_bleed(30.0).absolute(0.0, 0.0).size(sz, sz))),
+                // The expression swaps in the frame it changes, as the original's does.
+                .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT)),
         )
-        .children((!s.saved.color).then(|| el().size(0.0, 0.0)))
-        .opacity(1.0)
         .hover(p.tile_hover)
 }
 
@@ -320,9 +296,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let mut console = col()
         .key("console")
         .scale(fit)
-        .offset(if s.shake && !reduced { 9.0 } else { 0.0 }, 0.0)
-        .offset_motion(Spring::new(0.42, 0.78))
-        .motion_intent(MotionIntent::KICK)
         .size(console_w, console_h)
         .padding(PAD)
         .gap(12.0)
@@ -332,18 +305,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(drop(24.0, 60.0, ca(0x000000, 0.7)))
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
-        .child(effect(gfx::SHIMMER).key("sheen").absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
         .child(header(s, &p, inner_w))
         .child(board_el);
     if s.moments.won.is_some() {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
-    }
-    if let Some((t, _)) = boom {
-        // A red flash through the whole console as the mine goes.
-        const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0), Beat::new(0.09), Beat::new(0.75).opacity(0.0)];
-        let flash = el().key(format!("flash{}", s.field)).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0).fill(ca(0xff2d2d, 0.28)).inert().motion_intent(MotionIntent::PULSE);
-        console = console.child(if reduced { flash.opacity(0.0) } else { flash.sequence(Sequence::new(FLASH)) });
-        let _ = t;
     }
     if let Some((t, _)) = boom {
         console = console.child(effect(gfx::HEAT).key(format!("heat{}", s.field)).effect_data([t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
@@ -351,7 +316,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     // The shockwave reads the whole window; it stays mounted (idle, it draws nothing).
     let origin = cx.layout("board").map(|r| [r[0], r[1]]).unwrap_or([0.0, 0.0]);
     let (st, sp) = boom.unwrap_or((-100.0, [0.0, 0.0]));
-    let shock = effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 26.0]).absolute(0.0, 0.0).w_full().h_full().inert();
+    let shock = effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert();
     let cheat = s.cheat.then(|| {
         let safe = s.hover_cell.is_some_and(|i| !s.game.cells[i].mine);
         el().key("xyzzy").absolute(0.0, 0.0).size(2.0, 2.0).fill(if safe { rune::Color::WHITE } else { rune::Color::BLACK }).inert()
