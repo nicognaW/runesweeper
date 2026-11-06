@@ -267,6 +267,31 @@ fn the_history_button_opens_records_for_the_current_mode_and_level_newest_first(
 }
 
 #[test]
+fn every_record_is_reachable_in_history_however_many_there_are() {
+    let n = 1500;
+    let mut rt = runtime(Saved::default());
+    rt.update(|s, _| s.history = (0..n).map(|k| game(k as u64, Mode::Classic, (9, 9, 10), End::Lost, 5)).collect());
+    click(&mut rt, "history-button");
+    settle(&mut rt);
+    let first = rows(&rt);
+    assert_eq!(first.first(), Some(&(n - 1)), "newest first");
+    assert!(first.len() < 60, "only the rows near the view are drawn, not {}", first.len());
+    // Scrolled to the end, the oldest game is there.
+    let (x, y) = rt.find("history-list").expect("the list");
+    for _ in 0..200 {
+        rt.wheel(x, y, -2000.0);
+        rt.frame(1.0 / 60.0);
+    }
+    settle(&mut rt);
+    let last = rows(&rt);
+    assert_eq!(last.last(), Some(&0), "the oldest game, past {n} others");
+    assert!(last.len() < 60, "{} rows drawn", last.len());
+    click(&mut rt, "history-row-0");
+    settle(&mut rt);
+    assert!(rt.state.review.is_some(), "and it opens in Review");
+}
+
+#[test]
 fn history_filters_by_mode_and_level() {
     let mut rt = runtime(Saved::default());
     rt.update(|s, _| s.history = sample_history());

@@ -1,7 +1,7 @@
 //! The History panel: game records newest first, filtered by Mode and Level, with the fastest
 //! win for the pair on top.
 
-use rune::{Align, El, Icon, ScrollSpec, col, el, row, spacer, text};
+use rune::{Align, El, GrowthSpec, Icon, ScrollSpec, col, el, row, spacer, text};
 
 use crate::app::App;
 use crate::game::{Level, Mode};
@@ -16,14 +16,12 @@ pub static HISTORY: Icon = Icon {
     body: r#"<circle cx="8" cy="8" r="5.6" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 4.8V8L10.2 9.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
 };
 
-/// The most rows the list draws; older games stay in History, past the end of the list.
-const MAX_ROWS: usize = 200;
 const ROW_H: f32 = 44.0;
 
-/// The records the filter shows, newest first.
-pub fn shown(s: &App) -> Vec<(usize, &Record)> {
+/// The records the filter shows, newest first, with their place in History.
+pub fn shown(s: &App) -> impl Iterator<Item = (usize, &Record)> {
     let (mode, level) = s.history_filter;
-    s.history.iter().enumerate().rev().filter(|(_, r)| r.mode == mode && r.level() == level).collect()
+    s.history.iter().enumerate().rev().filter(move |(_, r)| r.mode == mode && r.level() == level)
 }
 
 /// The fastest win for the filter's Mode and Level; Custom has one per size, smallest first.
@@ -147,12 +145,23 @@ pub fn panel(s: &App, p: &Palette) -> El {
         .child(segments("history-modes", s.tr(S::ModeRow), modes, mode, |s, m| s.history_filter.0 = m, p))
         .child(segments("history-levels", s.tr(S::LevelRow), levels, level, |s, l| s.history_filter.1 = l, p))
         .children(bests(s).into_iter().map(|r| best_row(s, r, p)));
-    let rows: Vec<El> = shown(s).into_iter().take(MAX_ROWS).map(|(i, r)| record_row(s, i, r, p)).collect();
-    body = if rows.is_empty() {
+    // Every record is in the list, however many: only the rows near the view are built.
+    let count = shown(s).count();
+    body = if count == 0 {
         body.child(el().key("history-empty").w_full().h(ROW_H).center().child(text(s.tr(S::NoGames)).font(UI).color(p.muted)))
     } else {
-        let h = (rows.len() as f32 * ROW_H).min(4.5 * ROW_H);
-        body.child(well(col().key("history-list").w_full().h(h).radius(10.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(16.0).children(rows)))
+        let h = (count as f32 * ROW_H).min(4.5 * ROW_H);
+        let rows = col()
+            .key("history-rows")
+            .w_full()
+            .growth(GrowthSpec::default())
+            .virtual_rows(count, ROW_H, |_: &App, k| format!("history-at-{k}").into(), |s: &App, k| {
+                let p = Palette::get(s.saved.color);
+                // The row takes the list's key for its place; the record's own key is inside.
+                col().w_full().children(shown(s).nth(k).map(|(i, r)| record_row(s, i, r, &p)))
+            })
+            .virtual_rows_version((s.history.len(), s.history_filter));
+        body.child(well(col().key("history-list").w_full().h(h).radius(10.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(16.0).child(rows)))
     };
     surface("history", s.tr(S::History), "history-button", Align::End, body, p)
 }

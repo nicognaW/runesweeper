@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Level {
     Beginner,
     Intermediate,
@@ -32,7 +32,7 @@ impl Level {
 }
 
 /// How a field's mines are laid, chosen independently of the Level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Mode {
     /// Windows XP's fields, first-click quirks included.
     #[default]
