@@ -4,6 +4,7 @@
 
 pub mod bench;
 pub mod exact;
+pub mod fifty;
 pub mod play;
 
 use crate::game::{Cover, Game};
@@ -42,12 +43,15 @@ impl View {
     /// not facts.
     pub fn of(game: &Game) -> View {
         let mut v = View::new(game.w, game.h, game.mines);
-        for (i, c) in game.cells.iter().enumerate() {
-            if c.cover == Cover::Open && !c.mine {
-                v.open[i] = Some(c.adj);
-            }
-        }
+        v.refresh(game);
         v
+    }
+
+    /// Catches up with what `game`, the same field, now shows (cheaper than a new View).
+    pub fn refresh(&mut self, game: &Game) {
+        for (o, c) in self.open.iter_mut().zip(&game.cells) {
+            *o = (c.cover == Cover::Open && !c.mine).then_some(c.adj);
+        }
     }
 
     pub fn nbrs(&self, i: usize) -> &[usize] {

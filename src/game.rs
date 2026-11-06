@@ -42,10 +42,13 @@ pub enum Mode {
     GentleNoGuess,
     /// Fields perfect logic finishes from the first click, which always opens an area.
     NoGuess,
+    /// Fields built to force as many true 50/50s as possible, finished by logic between them;
+    /// the first click always opens an area.
+    MaxGuess,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 3] = [Mode::Classic, Mode::GentleNoGuess, Mode::NoGuess];
+    pub const ALL: [Mode; 4] = [Mode::Classic, Mode::GentleNoGuess, Mode::NoGuess, Mode::MaxGuess];
 
     /// Whether mines wait for the first click (and are laid by [`crate::generate::lay`]).
     pub fn lays_on_first_click(self) -> bool {
@@ -58,6 +61,7 @@ impl Mode {
             Mode::Classic => "classic",
             Mode::GentleNoGuess => "gentle-no-guess",
             Mode::NoGuess => "no-guess",
+            Mode::MaxGuess => "max-guess",
         }
     }
 
