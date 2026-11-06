@@ -122,7 +122,7 @@ The same game as Windows Minesweeper:
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
 - **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. The timer starts once the field is ready.
 - **Toolbar**: the chip on the left shows the Mode and Level and opens the picker: a row for the Mode, then Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
-- **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Until the MiSans font is bundled, Chinese uses the system's fonts on desktop, and may show as boxes on the web.
+- **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Chinese is drawn in Xiaomi's MiSans and Latin letters and digits in Inter, both built in, so Chinese shows on any machine and in the browser.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 
 Settings are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,
@@ -170,5 +170,11 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
 - `src/toolbar.rs`: the toolbar and the panels it opens.
 - `src/gfx.rs`: the compositor that turns effect slots into `rune-fx` shaders.
 - `vendor/rune-fx`: Rune's effects crate with a one-line fix so it builds for wasm.
+- `src/fonts.rs`, `build.rs`, `assets/fonts/`: the fonts. The build cuts MiSans VF down to the
+  characters in `src/strings.rs` (about 27 KB) and compiles it in; a new string needs no font step.
 
-MIT. Rune is MIT, © Anomaly. Not affiliated with Microsoft.
+MIT, except the fonts. MiSans VF (`assets/fonts/MiSans/`) is Xiaomi's, used under its own
+agreement, which is not an open-source licence: it may not be redistributed on its own or
+changed, and the app must say it uses MiSans (Settings does). Inter (`assets/fonts/Inter/`) is
+under the SIL Open Font License 1.1. Every build ships `NOTICES.txt` with both texts.
+Rune is MIT, © Anomaly. Not affiliated with Microsoft.
