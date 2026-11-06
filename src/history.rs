@@ -50,6 +50,11 @@ pub fn date(ms: u64, offset: i64) -> String {
     format!("{year:04}-{month:02}-{day:02} {:02}:{:02}", m / 60, m % 60)
 }
 
+/// A record's date and time on the player's clock, as it read when the game was played.
+fn local_date(ms: u64) -> String {
+    date(ms, crate::storage::utc_offset_minutes(ms))
+}
+
 /// One segmented filter row: a segment per option, the current one lit.
 fn segments<T: Copy + PartialEq + 'static>(key: &str, label: &str, options: Vec<(T, String, String)>, on: T, pick: fn(&mut App, T), p: &Palette) -> El {
     let mut r = row().key(key).role("radiogroup").label(label.to_string()).w_full().h(36.0).px(4.0).gap(4.0).center_y();
@@ -99,7 +104,7 @@ fn best_row(s: &App, r: &Record, p: &Palette) -> El {
     if r.level() == Level::Custom {
         line = line.child(text(sizes(r.dims)).font(SMALL).color(p.muted));
     }
-    choice(&format!("history-best-{w}x{h}x{m}"), false, p).border(1.0, p.win.alpha(0.6)).child(line.child(spacer()).child(text(date(r.at, s.utc_offset)).font(SMALL).color(p.muted)))
+    choice(&format!("history-best-{w}x{h}x{m}"), false, p).border(1.0, p.win.alpha(0.6)).child(line.child(spacer()).child(text(local_date(r.at)).font(SMALL).color(p.muted)))
 }
 
 fn record_row(s: &App, i: usize, r: &Record, p: &Palette) -> El {
@@ -130,7 +135,7 @@ fn record_row(s: &App, i: usize, r: &Record, p: &Palette) -> El {
                 .child(text(s.tr(end)).font(UI_BOLD).color(tint))
                 .child(text(seconds(s, r)).font(UI).color(p.text))
                 .child(spacer())
-                .child(text(date(r.at, s.utc_offset)).font(SMALL).color(p.muted)),
+                .child(text(local_date(r.at)).font(SMALL).color(p.muted)),
         )
         .child(text(detail(s, r)).font(SMALL).color(p.muted))
 }

@@ -126,8 +126,6 @@ pub struct App {
     record_t0: Option<f64>,
     /// The Mode and Level History shows; the current ones each time it opens.
     pub history_filter: (Mode, Level),
-    /// Minutes from UTC to the player's clock, for History's dates.
-    pub utc_offset: i64,
     /// The Hint on screen and how far into it the player has stepped. Any move clears it.
     pub hint: Option<Shown>,
     /// A game being reviewed: its field is drawn instead of the game in play, which waits,
@@ -211,7 +209,6 @@ impl App {
             record: Record::new(Mode::Classic, (0, 0, 0)),
             record_t0: None,
             history_filter: (Mode::Classic, level),
-            utc_offset: storage::utc_offset_minutes(),
             hint: None,
             review: None,
             banner_done: false,
