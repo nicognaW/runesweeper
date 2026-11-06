@@ -7,6 +7,7 @@ use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx};
 use crate::game::{Cover, Game, Level, Outcome, Rng, Status, clamp_custom};
 use crate::icons::Mood;
 use crate::storage::{self, Saved};
+use crate::strings::{Lang, S};
 use crate::style::{PITCH, WELL, window_size};
 
 /// The panels the toolbar opens, one at a time.
@@ -45,6 +46,8 @@ pub struct App {
     pub game: Game,
     pub level: Level,
     pub saved: Saved,
+    /// The language every string is in: the one picked in Settings, else the system's.
+    pub lang: Lang,
     /// Bumped by every new field, so each deal mounts fresh tiles.
     pub field: u32,
     /// The app clock, from poll.
@@ -90,13 +93,23 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let saved = storage::load();
-        Self::with(saved, storage::seed())
+        let lang = saved.lang.unwrap_or_else(crate::locale::system);
+        Self::in_lang(saved, storage::seed(), lang)
     }
 
+    /// The app in the saved language, English if none was picked (headless runs and tests
+    /// don't depend on the machine's).
     pub fn with(saved: Saved, seed: u32) -> App {
+        let lang = saved.lang.unwrap_or_default();
+        Self::in_lang(saved, seed, lang)
+    }
+
+    fn in_lang(saved: Saved, seed: u32, lang: Lang) -> App {
+        shape_in(lang);
         let level = saved.level;
         let (w, h, m) = level.dims().unwrap_or(saved.custom);
         App {
+            lang,
             game: Game::new(w, h, m, Rng::new(seed)),
             level,
             saved,
@@ -126,6 +139,24 @@ impl App {
             edit_h: TextEdit::new(""),
             edit_m: TextEdit::new(""),
         }
+    }
+
+    /// `k` in the game's language.
+    pub fn tr(&self, k: S) -> &'static str {
+        k.get(self.lang)
+    }
+
+    /// `k` in the game's language, its `{}` slots filled by `args` in order.
+    pub fn trf(&self, k: S, args: &[&dyn std::fmt::Display]) -> String {
+        k.fill(self.lang, args)
+    }
+
+    /// Switches every string to `lang` at once, and saves it.
+    pub fn set_lang(&mut self, lang: Lang) {
+        self.lang = lang;
+        self.saved.lang = Some(lang);
+        storage::save(&self.saved);
+        shape_in(lang);
     }
 
     pub fn dims(&self) -> (usize, usize, usize) {
@@ -457,6 +488,12 @@ impl App {
             _ => false,
         }
     }
+}
+
+/// Text is shaped in the game's language, so Chinese is shaped as Chinese and falls back to
+/// Simplified Chinese fonts.
+fn shape_in(lang: Lang) {
+    rune::text::set_language(Some(lang.tag()));
 }
 
 impl Default for App {

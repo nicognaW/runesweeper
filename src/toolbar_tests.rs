@@ -8,7 +8,7 @@ use crate::game::Level;
 use crate::storage::Saved;
 use crate::ui;
 
-fn runtime(saved: Saved) -> Runtime<App> {
+pub(crate) fn runtime(saved: Saved) -> Runtime<App> {
     let (w, h) = crate::style::window_size(30, 24);
     let mut rt = Runtime::new(App::with(saved, 7), ui::view, (w, h), Env { system_dark: true, scale: 1.0 });
     rt.on_key = Some(|s, e, tx| s.key(e, tx));
@@ -17,41 +17,41 @@ fn runtime(saved: Saved) -> Runtime<App> {
 }
 
 /// Lets springs run out, so exits finish and entrances land.
-fn settle(rt: &mut Runtime<App>) {
+pub(crate) fn settle(rt: &mut Runtime<App>) {
     for _ in 0..90 {
         rt.frame(1.0 / 60.0);
     }
 }
 
-fn click(rt: &mut Runtime<App>, key: &str) {
+pub(crate) fn click(rt: &mut Runtime<App>, key: &str) {
     let (x, y) = rt.find(key).unwrap_or_else(|| panic!("no element keyed {key}"));
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
 }
 
-fn press(rt: &mut Runtime<App>, key: Key) {
+pub(crate) fn press(rt: &mut Runtime<App>, key: Key) {
     let cmd = matches!(key, Key::Command(_));
     rt.key(KeyEvent { key, mods: Mods { cmd, ..Mods::default() } });
     rt.frame(1.0 / 60.0);
 }
 
-fn type_text(rt: &mut Runtime<App>, s: &str) {
+pub(crate) fn type_text(rt: &mut Runtime<App>, s: &str) {
     rt.key(KeyEvent { key: Key::Text(s.into()), mods: Mods::default() });
     rt.frame(1.0 / 60.0);
 }
 
-fn shown(rt: &Runtime<App>, key: &str) -> bool {
+pub(crate) fn shown(rt: &Runtime<App>, key: &str) -> bool {
     rt.find(key).is_some()
 }
 
 /// Every string the screen shows or names, text and accessible labels alike.
-fn words(rt: &Runtime<App>) -> Vec<String> {
+pub(crate) fn words(rt: &Runtime<App>) -> Vec<String> {
     rt.elements().into_iter().filter(|e| !e.exiting).flat_map(|e| [e.text, e.label, e.help].into_iter().flatten()).collect()
 }
 
 /// The text inside the element keyed `key`.
-fn text_in(rt: &Runtime<App>, key: &str) -> String {
+pub(crate) fn text_in(rt: &Runtime<App>, key: &str) -> String {
     let els = rt.elements();
     let Some(root) = els.iter().find(|e| e.key.as_deref() == Some(key) && !e.exiting) else { return String::new() };
     els.iter().filter(|e| e.path.starts_with(&root.path) && !e.exiting).filter_map(|e| e.text.clone()).collect::<Vec<_>>().join(" ")

@@ -108,7 +108,7 @@ The same game as Windows Minesweeper:
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
 - **Toolbar**: the chip on the left shows the Level and opens the picker: Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
-- **Settings** (the button on the right): Marks (?) and Color.
+- **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Until the MiSans font is bundled, Chinese uses the system's fonts on desktop, and may show as boxes on the web.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 
 Settings are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,

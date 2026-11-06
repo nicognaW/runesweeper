@@ -6,6 +6,7 @@ use rune_kit::{Kit, PaletteSeed};
 use crate::app::App;
 use crate::game::Status;
 use crate::icons::{digit, face, led_text};
+use crate::strings::S;
 use crate::style::*;
 use crate::{board, gfx, toolbar};
 
@@ -15,7 +16,7 @@ fn kit(p: &Palette) -> Kit {
     k
 }
 
-fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
+fn led(key: &str, label: String, v: i32, p: &Palette, color: bool, gold: bool) -> El {
     let (dw, dh) = (17.0, 30.0);
     // Digits change in the frame they change, as an LED does.
     let mut digits = row().gap(4.0).motion_intent(MotionIntent::STEP);
@@ -34,7 +35,7 @@ fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
         .child(effect(gfx::LED).effect_data([if !color { 4.0 } else if gold { 0.0 } else { 7.0 }, 0.16, 5.0, 0.0]).absolute(6.0, 6.0).size(w - 12.0, h - 12.0).radius(4.0))
         .child(digits)
         .role("status")
-        .label(format!("{key}: {v}"))
+        .label(label)
 }
 
 fn face_button(s: &App, p: &Palette) -> El {
@@ -49,7 +50,7 @@ fn face_button(s: &App, p: &Palette) -> El {
         .center()
         .press_scale(0.9)
         .role("button")
-        .label("New game")
+        .label(s.tr(S::NewGame))
         .focusable(true)
         .on_press(|s: &mut App| s.new_game())
         .child(
@@ -75,11 +76,11 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .box_shadow(inset(1.0, 5.0, ca(0x000000, 0.6)))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.05)))
         .center_y()
-        .child(led("Mines", s.game.counter(), p, s.saved.color, false))
+        .child(led("Mines", s.trf(S::MinesLeft, &[&s.game.counter()]), s.game.counter(), p, s.saved.color, false))
         .child(spacer())
         .child(face_button(s, p))
         .child(spacer())
-        .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
+        .child(led("Time", s.trf(S::Time, &[&s.seconds]), s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
 }
 
 /// The app icon: a raised console tile with the face over a corner of the field.

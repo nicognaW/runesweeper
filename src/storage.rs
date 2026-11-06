@@ -2,12 +2,15 @@
 //! desktop, `localStorage` on the web.
 
 use crate::game::Level;
+use crate::strings::Lang;
 
 pub struct Saved {
     pub level: Level,
     pub custom: (usize, usize, usize),
     pub marks: bool,
     pub color: bool,
+    /// The language picked in Settings; until one is, the game follows the system's.
+    pub lang: Option<Lang>,
 }
 
 impl Default for Saved {
@@ -17,6 +20,7 @@ impl Default for Saved {
             custom: (9, 9, 10),
             marks: true,
             color: true,
+            lang: None,
         }
     }
 }
@@ -44,6 +48,7 @@ impl Saved {
                 }
                 "marks" => s.marks = v.trim() == "1",
                 "color" => s.color = v.trim() == "1",
+                "lang" => s.lang = Lang::ALL.into_iter().find(|l| l.tag() == v.trim()),
                 // Anything else (the old best times and first-run flag among them) is dropped.
                 _ => {}
             }
@@ -59,7 +64,11 @@ impl Saved {
             Level::Custom => "custom",
         };
         let (w, h, m) = self.custom;
-        format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.marks as u8, self.color as u8)
+        let mut out = format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.marks as u8, self.color as u8);
+        if let Some(l) = self.lang {
+            out += &format!("lang={}\n", l.tag());
+        }
+        out
     }
 }
 
@@ -148,6 +157,18 @@ mod tests {
         assert_eq!(back.level, Level::Expert);
         assert_eq!(back.custom, (20, 12, 50));
         assert!(!back.marks && back.color);
+    }
+
+    #[test]
+    fn the_language_is_saved_once_chosen_and_follows_the_system_until_then() {
+        assert_eq!(Saved::parse("level=expert\n").lang, None, "never chosen");
+        assert!(!Saved::default().write().contains("lang"), "nothing written until chosen");
+        for lang in Lang::ALL {
+            let s = Saved { lang: Some(lang), ..Saved::default() };
+            assert_eq!(Saved::parse(&s.write()).lang, Some(lang));
+        }
+        assert_eq!(Saved::parse("lang=zh-CN\n").lang, Some(Lang::ZhCn));
+        assert_eq!(Saved::parse("lang=klingon\n").lang, None, "an unknown language counts as none");
     }
 
     #[test]

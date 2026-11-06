@@ -8,6 +8,7 @@ use rune_motion::SpringPair;
 use crate::app::{App, Panel};
 use crate::game::Level;
 use crate::icons::flag;
+use crate::strings::{Lang, S};
 use crate::style::*;
 
 static SETTINGS: Icon = Icon {
@@ -49,14 +50,15 @@ fn tool(key: &str, label: &str, glyph: El, p: &Palette) -> El {
 
 /// The Level chip: the current Level, and the picker it opens.
 fn chip(s: &App, p: &Palette) -> El {
-    let mut label = row().gap(6.0).center_y().child(text(s.level.name()).font(UI_BOLD).color(p.text));
+    let name = s.tr(S::level(s.level));
+    let mut label = row().gap(6.0).center_y().child(text(name).font(UI_BOLD).color(p.text));
     if s.level == Level::Custom {
         label = label.child(text(sizes(s.dims())).font(SMALL).color(p.muted));
     }
     well(row().key("level-chip").h(30.0).px(12.0).gap(6.0).radius(9.0))
         .center_y()
         .role("button")
-        .label(s.level.name().to_string())
+        .label(name.to_string())
         .expanded(s.panel == Some(Panel::Picker))
         .focusable(true)
         .press_scale(0.97)
@@ -71,7 +73,7 @@ fn chip(s: &App, p: &Palette) -> El {
 fn flag_toggle(s: &App, p: &Palette) -> El {
     let on = s.flag_mode;
     let (cloth, pole) = if on { (rune::Color::WHITE, rune::Color::WHITE) } else { (p.muted, p.muted) };
-    let t = tool("flag-toggle", "Flag mode", flag(18.0, cloth, pole), p).role("switch").checked(on).on_press(|s: &mut App| s.flag_mode = !s.flag_mode);
+    let t = tool("flag-toggle", s.tr(S::FlagMode), flag(18.0, cloth, pole), p).role("switch").checked(on).on_press(|s: &mut App| s.flag_mode = !s.flag_mode);
     if on { t.fill(p.flag).box_shadow(drop(0.0, 12.0, p.flag.alpha(0.55))) } else { t }
 }
 
@@ -82,7 +84,7 @@ fn tools(s: &App, p: &Palette) -> Vec<El> {
         v.push(flag_toggle(s, p));
     }
     v.push(
-        tool("settings-button", "Settings", icon(&SETTINGS, 16.0).color(p.text), p)
+        tool("settings-button", s.tr(S::Settings), icon(&SETTINGS, 16.0).color(p.text), p)
             .expanded(s.panel == Some(Panel::Settings))
             .on_press(|s: &mut App| s.toggle_panel(Panel::Settings)),
     );
@@ -122,11 +124,12 @@ fn picker(s: &App, k: &Kit, p: &Palette) -> El {
     let mut body = col().w(270.0).gap(6.0);
     for l in LEVELS {
         let detail = l.dims().map(sizes);
+        let name = s.tr(S::level(l));
         let mut r = choice(level_key(l), s.level == l, p)
             .role("button")
-            .label(l.name().to_string())
+            .label(name.to_string())
             .on_press_tx(move |s: &mut App, tx| s.pick_level(l, tx))
-            .child(text(l.name()).font(UI_BOLD).color(p.text))
+            .child(text(name).font(UI_BOLD).color(p.text))
             .child(spacer());
         if let Some(d) = detail {
             r = r.child(text(d).font(SMALL).color(p.muted));
@@ -145,11 +148,11 @@ fn picker(s: &App, k: &Kit, p: &Palette) -> El {
             .gap(8.0)
             .px(4.0)
             .pb(2.0)
-            .child(input("custom-w", "Width", &s.edit_w, |s| &mut s.edit_w))
-            .child(input("custom-h", "Height", &s.edit_h, |s| &mut s.edit_h))
-            .child(input("custom-m", "Mines", &s.edit_m, |s| &mut s.edit_m)),
+            .child(input("custom-w", s.tr(S::Width), &s.edit_w, |s| &mut s.edit_w))
+            .child(input("custom-h", s.tr(S::Height), &s.edit_h, |s| &mut s.edit_h))
+            .child(input("custom-m", s.tr(S::Mines), &s.edit_m, |s| &mut s.edit_m)),
     );
-    surface("picker", "Level", "level-chip", Align::Start, body, p)
+    surface("picker", s.tr(S::LevelPicker), "level-chip", Align::Start, body, p)
 }
 
 fn setting(key: &str, label: &str, on: bool, toggle: fn(&mut App), k: &Kit, p: &Palette) -> El {
@@ -163,13 +166,43 @@ fn setting(key: &str, label: &str, on: bool, toggle: fn(&mut App), k: &Kit, p: &
         .child(Switch::new(on).hide_label().build(k).inert())
 }
 
+/// The Language row: each language by its own name, the current one lit. A press switches
+/// every string at once.
+fn language(s: &App, p: &Palette) -> El {
+    let mut options = row().key("language").role("radiogroup").label(s.tr(S::Language)).gap(4.0);
+    for l in Lang::ALL {
+        let on = s.lang == l;
+        let mut o = el()
+            .key(format!("lang-{}", l.tag()))
+            .h(28.0)
+            .px(10.0)
+            .radius(7.0)
+            .center()
+            .role("radio")
+            .label(l.endonym())
+            .checked(on)
+            .focusable(true)
+            .press_scale(0.96)
+            .on_press(move |s: &mut App| s.set_lang(l))
+            .child(text(l.endonym()).font(UI_BOLD).color(if on { p.text } else { p.muted }));
+        o = if on { o.fill(p.accent.alpha(0.22)).border(1.0, p.accent.alpha(0.8)) } else { o.hover(p.tile_hover) };
+        options = options.child(o);
+    }
+    well(row().w_full().h(40.0).pl(12.0).pr(6.0).gap(8.0).radius(10.0))
+        .center_y()
+        .child(text(s.tr(S::Language)).font(UI_BOLD).color(p.text))
+        .child(spacer())
+        .child(options)
+}
+
 fn settings(s: &App, k: &Kit, p: &Palette) -> El {
     let body = col()
-        .w(230.0)
+        .w(270.0)
         .gap(6.0)
-        .child(setting("marks-switch", "Marks (?)", s.saved.marks, App::toggle_marks, k, p))
-        .child(setting("color-switch", "Color", s.saved.color, App::toggle_color, k, p));
-    surface("settings", "Settings", "settings-button", Align::End, body, p)
+        .child(setting("marks-switch", s.tr(S::Marks), s.saved.marks, App::toggle_marks, k, p))
+        .child(setting("color-switch", s.tr(S::Color), s.saved.color, App::toggle_color, k, p))
+        .child(language(s, p));
+    surface("settings", s.tr(S::Settings), "settings-button", Align::End, body, p)
 }
 
 /// The open panel, over a transparent catcher that closes it on a press anywhere else.

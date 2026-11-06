@@ -3,7 +3,11 @@
 //!
 //! Rules: Classic (XP's `rand()` stream, seeded once, one field after another), first click
 //! on the top-left cell with XP's first-click relocation; the same seed gives the same games.
-use runesweeper::{game::Level, solver::bench};
+use runesweeper::{
+    game::Level,
+    solver::bench,
+    strings::{Lang, S},
+};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -17,7 +21,7 @@ fn main() {
         let (lo, hi) = bench::wilson(t.wins, t.games);
         println!(
             "{:<13} {:>6.2}%  {:>6.2}% – {:>6.2}% {:>10.2} {:>13.2}% {:>9.3}",
-            level.name(),
+            S::level(level).get(Lang::En),
             100.0 * t.win_rate(),
             100.0 * lo,
             100.0 * hi,

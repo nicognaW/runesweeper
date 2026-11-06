@@ -10,6 +10,7 @@ use crate::app::App;
 use crate::game::{Cover, Status};
 use crate::gfx;
 use crate::icons::{cross, flag, mine};
+use crate::strings::S;
 use crate::style::*;
 
 /// Emil Kowalski's strong ease-out: for everything entering or leaving.
@@ -196,7 +197,7 @@ pub fn view(s: &App, reduced: bool) -> El {
             }
         })
         .role("grid")
-        .label("Minefield")
+        .label(s.tr(S::Minefield))
         // A field a key asked for arrives in one frame, by design.
         .motion_intent(if s.deal { MotionIntent::NONE } else { MotionIntent::CUT })
         .children(opens)
@@ -230,12 +231,12 @@ pub fn view(s: &App, reduced: bool) -> El {
 fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
     let (title, sub, tint, delay) = match s.game.status {
         Status::Won => (
-            format!("Cleared in {} second{}", s.seconds, if s.seconds == 1 { "" } else { "s" }),
-            if s.new_best { format!("New best for {}", s.level.name()) } else { "F2 or the face for another".into() },
+            if s.seconds == 1 { s.tr(S::WonIn1).to_string() } else { s.trf(S::WonIn, &[&s.seconds]) },
+            if s.new_best { s.trf(S::NewBest, &[&s.tr(S::level(s.level))]) } else { s.tr(S::WonAgain).to_string() },
             p.win,
             0.3,
         ),
-        Status::Lost => ("Boom.".to_string(), "F2 or the face to try again".to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
+        Status::Lost => (s.tr(S::Lost).to_string(), s.tr(S::LostAgain).to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
         _ => return None,
     };
     if s.banner_done {
