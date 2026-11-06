@@ -71,12 +71,6 @@ pub struct App {
     /// Max Guess: the true 50/50s the laid field forces on a perfect player, each as its pair
     /// of cells (empty in the other modes, and before the field is laid).
     pub fifty_fifties: Vec<(usize, usize)>,
-    /// When that generation started, on the poll clock (stamped by the first poll after the
-    /// click, as the click's own clock may be stale).
-    pub generating_since: Option<f64>,
-    /// When the band of light over the hidden tiles started, 600 ms into a generation that is
-    /// still running (on the poll clock).
-    pub sweep_from: Option<f64>,
     /// History's record `.0`, whose review waits for its field, laid again off the UI thread:
     /// the record keeps only its seed and first click. The face thinks meanwhile.
     pub review_laying: Option<(usize, Generating)>,
@@ -180,8 +174,6 @@ impl App {
             generating: None,
             review_laying: None,
             fifty_fifties: Vec::new(),
-            generating_since: None,
-            sweep_from: None,
             lay: generate::lay,
             waker: None,
             saved,
@@ -263,8 +255,6 @@ impl App {
         // A field still generating is cancelled: it never lands.
         self.generating = None;
         self.fifty_fifties.clear();
-        self.generating_since = None;
-        self.sweep_from = None;
         self.unlaid = self.mode.lays_on_first_click();
         if self.unlaid {
             self.seed = self.seeds.next_u64();
@@ -281,16 +271,12 @@ impl App {
     /// click name, off the UI thread.
     fn lay_at(&mut self, first: usize) {
         self.generating = Some(Generating::start(self.lay, self.mode, self.dims(), self.seed, first, self.waker.clone()));
-        self.generating_since = None;
-        self.sweep_from = None;
     }
 
     /// The generated field lands: any marks already placed are kept, and the first click
     /// opens it. The clock starts at the next poll.
     fn land(&mut self, mut g: Game, first: usize) {
         self.generating = None;
-        self.generating_since = None;
-        self.sweep_from = None;
         for (c, old) in g.cells.iter_mut().zip(&self.game.cells) {
             c.cover = old.cover;
         }
@@ -484,7 +470,7 @@ impl App {
     /// A field just laid starts its clock at the next poll, and a generation just started
     /// stamps its start there: ask for one now.
     fn wake_clock(&self, tx: &mut Tx) {
-        if self.clock_waits || (self.generating.is_some() && self.generating_since.is_none()) {
+        if self.clock_waits || self.generating.as_ref().is_some_and(|g| g.since.is_none()) {
             tx.wake_after(Duration::ZERO);
         }
     }
@@ -740,7 +726,7 @@ impl App {
         }
         // Without a waker nothing says when the field lands: look a few times a second.
         let check = if self.waker.is_some() { f64::INFINITY } else { 1.0 / 30.0 };
-        let since = *self.generating_since.get_or_insert(self.now);
+        let since = *job.since.get_or_insert(self.now);
         let due = since + Self::SWEEP_AFTER - self.now;
         if due > 0.0 {
             tx.wake_after(Duration::from_secs_f64(due.min(check)));
@@ -750,8 +736,8 @@ impl App {
             tx.wake_after(Duration::from_secs_f64(check));
         }
         // The sweep mounts at the first poll past 600 ms.
-        if self.sweep_from.is_none() {
-            self.sweep_from = Some(since + Self::SWEEP_AFTER);
+        if job.sweep_from.is_none() {
+            job.sweep_from = Some(since + Self::SWEEP_AFTER);
             return true;
         }
         false

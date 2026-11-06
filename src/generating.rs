@@ -19,6 +19,12 @@ pub type Lay = fn(Mode, LevelSize, u64, usize) -> Game;
 pub struct Generating {
     /// The first click it was asked for, opened once the field lands.
     pub first: usize,
+    /// When it started, on the poll clock (stamped by the first poll after the click, as the
+    /// click's own clock may be stale).
+    pub since: Option<f64>,
+    /// When the band of light over the hidden tiles started, 600 ms into a generation that is
+    /// still running (on the poll clock).
+    pub sweep_from: Option<f64>,
     job: imp::Job,
 }
 
@@ -26,7 +32,7 @@ impl Generating {
     /// Starts laying the field `lay` gives for these inputs; `wake` runs once it is ready.
     /// The web's worker runs [`generate::lay`] whatever `lay` is.
     pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Generating {
-        Generating { first, job: imp::Job::start(lay, mode, dims, seed, first, wake) }
+        Generating { first, since: None, sweep_from: None, job: imp::Job::start(lay, mode, dims, seed, first, wake) }
     }
 
     /// The field, once, when it is ready.

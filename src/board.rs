@@ -218,7 +218,7 @@ pub fn view(s: &App, reduced: bool) -> El {
         });
     // A field taking its time: a slow band of light over the hidden tiles, gone in the frame
     // the field lands.
-    if let Some(t0) = s.sweep_from {
+    if let Some(t0) = s.generating.as_ref().and_then(|g| g.sweep_from) {
         board = board.child(
             effect(gfx::SWEEP)
                 .key("sweep")
