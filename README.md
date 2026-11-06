@@ -35,6 +35,10 @@ that couldn't were cut.
   toolbar in about 0.2 s; Escape closes one in the same frame.
 - **A new field** from the face or the picker deals in from the centre in under half a second;
   from F2 it's simply there, old field gone in the same frame.
+- **A field that takes its time** (No Guess generates after the first click, off the UI thread):
+  the face thinks at once, the field holds still, and only past 600 ms does a slow band of light
+  sweep the hidden tiles, stopping in the frame the field is ready. Quick fields show nothing
+  but the face. With Reduce Motion the light breathes in place instead of travelling.
 - **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
   out from the one you hit, then still.
 - **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
@@ -89,11 +93,21 @@ level (seed 1, release build, one native core):
 
 The bot then wins every one of them without a guess.
 
+The web build generates in a worker; its wasm (the site's own build, run by Node's V8, same
+seed) takes:
+
+| Level | Generation p50 | p99 |
+| --- | --- | --- |
+| Beginner | 0.09 ms | 0.65 ms |
+| Intermediate | 0.55 ms | 2.2 ms |
+| Expert | 7.6 ms | 45 ms |
+
 ```sh
 cargo run --release --example solver -- 10000 1 1000   # Classic games per level, seed, No Guess fields
 ```
 
 It prints the same columns for Beginner and Intermediate; the same seed gives the same numbers.
+`scripts/web-build.sh && node scripts/wasm-bench.mjs dist/web 1000 1` measures the wasm.
 
 ## Download
 
@@ -120,7 +134,7 @@ The same game as Windows Minesweeper:
 - A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
-- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. The timer starts once the field is ready.
+- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. It is generated off the UI thread (a thread on desktop, a web worker in the browser), so the window never freezes; F2 or the face cancels it for a fresh field. The timer starts once the field is ready.
 - **Toolbar**: the chip on the left shows the Mode and Level and opens the picker: a row for the Mode, then Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
 - **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Until the MiSans font is bundled, Chinese uses the system's fonts on desktop, and may show as boxes on the web.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.

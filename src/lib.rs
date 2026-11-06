@@ -4,6 +4,7 @@ pub mod app;
 pub mod board;
 pub mod game;
 pub mod generate;
+pub mod generating;
 pub mod gfx;
 pub mod icons;
 pub mod locale;
@@ -22,6 +23,8 @@ mod lang_tests;
 mod generate_tests;
 #[cfg(test)]
 mod mode_tests;
+#[cfg(test)]
+mod generating_tests;
 
 use app::App;
 use game::Level;
@@ -88,6 +91,17 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     ("no-guess", |a| {
         let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
         *a = App::with(saved, 5);
+        a.open_at(a.game.idx(15, 8));
+        a.finish_laying();
+    }),
+    // A field that takes its time: the face thinks, and after 600 ms the light sweeps.
+    ("generating", |a| {
+        let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
+        *a = App::with(saved, 5);
+        a.lay = |mode, dims, seed, first| {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            generate::lay(mode, dims, seed, first)
+        };
         a.open_at(a.game.idx(15, 8));
     }),
     ("picker", |a| {
@@ -177,6 +191,7 @@ pub fn spec() -> AppSpec<App> {
     AppSpec {
         scenes: SCENES,
         min_size: Some((300.0, 300.0)),
+        setup: Some(|s, waker| s.waker = Some(waker)),
         poll: Some(|s, t, tx| s.tick(t, tx)),
         on_key: Some(|s, e, tx| s.key(e, tx)),
         ..AppSpec::new("Runesweeper", initial_size(), init, ui::view)
@@ -209,6 +224,9 @@ pub fn run() {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen::prelude::wasm_bindgen(start))]
 pub fn start() {
+    // In the field generator's worker, the same wasm runs no app.
     #[cfg(target_arch = "wasm32")]
-    run();
+    if web_sys::window().is_some() {
+        run();
+    }
 }

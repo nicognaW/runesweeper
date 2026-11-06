@@ -94,3 +94,27 @@ fn classic_is_the_xp_field_from_its_rand_stream() {
     assert_eq!(mines(&a), mines(&b));
     assert_eq!(mines(&lay(Mode::Classic, EXPERT, 9, 250)), mines(&b));
 }
+
+#[test]
+fn a_stopped_search_gives_up_and_a_plain_one_never_does() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+    // A field logic can almost never finish: without a stop it would search on and on.
+    let dense = (30, 24, 600);
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = stop.clone();
+    let setter = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        flag.store(true, Ordering::Relaxed);
+    });
+    let t = Instant::now();
+    crate::generate::stoppable(stop, || lay(Mode::NoGuess, dense, 1, 300));
+    assert!(t.elapsed() < Duration::from_secs(5), "it stopped soon after asked: {:?}", t.elapsed());
+    setter.join().unwrap();
+    assert!(!crate::generate::stopped(), "outside a stoppable call nothing stops");
+    // Not stopped, the same call lays the very field a plain one does.
+    let quiet = Arc::new(AtomicBool::new(false));
+    let a = crate::generate::stoppable(quiet, || lay(Mode::NoGuess, INTERMEDIATE, 9, 100));
+    assert_eq!(mines(&a), mines(&lay(Mode::NoGuess, INTERMEDIATE, 9, 100)));
+}
