@@ -9,8 +9,9 @@ export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 if ! command -v rustup >/dev/null; then
     curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
 fi
-rustup target add wasm32-unknown-unknown
-rustup component add rust-src
+# Current stable: Vercel's image ships an older default toolchain that Rune doesn't build on.
+rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown --component rust-src
+export RUSTUP_TOOLCHAIN=stable
 
 v=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')
 if [[ $(wasm-bindgen --version 2>/dev/null) != "wasm-bindgen $v" ]]; then
