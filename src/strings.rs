@@ -131,14 +131,20 @@ strings! {
     TechOneTwo: "1-2 pattern", "12定式";
     TechReductionOneOne: "Reduction to a 1-1", "减雷变11定式";
     TechReductionOneTwo: "Reduction to a 1-2", "减雷变12定式";
-    TechNothing: "No simple step", "没有简单推理";
+    TechChain: "Chain of steps", "多步推理";
+    TechSuppose: "Proof by contradiction", "假设法";
+    TechCount: "Mine count", "剩余雷数";
+    TechNothing: "No sure move", "没有确定的格子";
     NudgeWrongFlag: "One of your flags can't be right.", "有一面旗插错了。";
     NudgeSingle: "Look for a number with only as many hidden cells as it needs.", "找一个周围只剩下对应数量格子的数字。";
     NudgeSatisfied: "Look for a number that already has all its mines.", "找一个周围的雷已经够数的数字。";
     NudgeOneOne: "Compare two numbers that share hidden cells.", "比较两个共用格子的数字，找 11定式。";
     NudgeOneTwo: "Compare two numbers that share hidden cells, and their difference.", "比较两个共用格子的数字，找 12定式。";
     NudgeReduction: "Subtract the mines you can prove, then compare two numbers.", "先减雷，再比较两个数字。";
-    NudgeNothing: "No one or two numbers settle any cell right now.", "现在没有只靠一两个数字就能确定的格子。";
+    NudgeChain: "Work it out a step at a time: each step settles cells for the next.", "一步一步推：前一步确定的格子，帮下一步判雷。";
+    NudgeSuppose: "Suppose a cell is a mine, or safe, and see which number breaks.", "假设某一格是雷或安全，看哪个数字出矛盾。";
+    NudgeCount: "Count the mines left to find.", "根据剩余雷数来判断。";
+    NudgeNothing: "No cell can be proven right now.", "现在推不出任何能确定的格子。";
     LookOne: "Look at this number.", "看这个数字。";
     LookMany: "Look at these numbers.", "看这几个数字。";
     CellSafe: "This cell is safe.", "这一格必定安全。";
@@ -156,6 +162,29 @@ strings! {
     StepRestMine: "That {} still needs {}, but the shared cells hold at most {}, so the cells it doesn't share hold the rest: this cell must be a mine.", "再看那个 {}，它周围还有 {}，共用的格子里最多只有 {}，剩下的雷只能在不共用的格子里……所以这一格必须是雷。";
     StepContradiction: "If this flagged cell were a mine, these numbers could not all be right, so it must be safe.", "假设这一格是雷，这些数字就不可能都对……所以这一格必定安全。";
     StepFlagWrong: "The flag on it is wrong.", "所以这面旗插错了。";
+    StepRestSafes: "That {} still needs {}, no more than the shared cells hold, so its other cells are safe.", "再看那个 {}，它周围还有 {}，已经在共用的格子里了……所以它不共用的格子都安全。";
+    StepRestMines: "That {} still needs {}, but the shared cells hold at most {}, so the cells it doesn't share are all mines.", "再看那个 {}，它周围还有 {}，共用的格子里最多只有 {}，剩下的雷只能在不共用的格子里……所以这些格子全是雷。";
+    StepNowMines: "This {} still needs {} and has only {} left, so they are all mines.", "这个 {} 还差 {}，只剩下 {}……所以这些格子全是雷。";
+    StepNowMine1: "This {} still needs {} and has only {} left, so that cell is a mine.", "这个 {} 还差 {}，只剩下 {}……所以那一格是雷。";
+    StepNowMine: "This {} still needs {} and has only {} left, so this cell must be a mine.", "看这个 {}，它还差 {}，只剩下 {}……所以这一格必须是雷。";
+    StepNowSafes: "This {} already has its {}, so its other hidden cells are safe.", "这个 {} 周围的 {}已经够了……所以其余的格子都安全。";
+    StepNowSafe: "This {} already has its {}, so this cell must be safe.", "看这个 {}，它周围的 {}已经够了……所以这一格必定安全。";
+    StepSupposeMine: "Suppose this cell were a mine.", "假设这一格是雷。";
+    StepSupposeSafe: "Suppose this cell were safe.", "假设这一格是安全的。";
+    StepBrokenOver: "Then this {} would have too many mines.", "那么这个 {} 周围的雷就太多了。";
+    StepBrokenUnder: "Then this {} could not get all its mines.", "那么这个 {} 周围的雷就不够了。";
+    StepNoRoom: "Then these numbers could not all be right.", "那么这几个数字就不可能都对。";
+    StepNoRoomCount: "Then these numbers and the mines left to find could not all fit.", "那么根据剩余雷数，这几个数字就不可能都对。";
+    StepSoMine: "So this cell must be a mine.", "所以这一格必须是雷。";
+    StepSoSafe: "So this cell must be safe.", "所以这一格必定安全。";
+    StepCountNone: "Every mine is found, so every other hidden cell is safe.", "根据剩余雷数：雷已经全部找到了……所以其余的格子全部安全。";
+    StepCountEvery: "As many mines are left to find as hidden cells, so every one is a mine.", "根据剩余雷数：剩下的雷和没打开的格子一样多……所以这些格子全是雷。";
+    StepCountAll: "Only {} left to find, and these numbers need that many, so every other hidden cell is safe.", "根据剩余雷数：只剩 {}没找到，这几个数字周围就要用掉这么多……所以其余的格子全部安全。";
+    StepCountAll1: "Only {} left to find, and this number needs that many, so every other hidden cell is safe.", "根据剩余雷数：只剩 {}没找到，这个数字周围就要用掉这么多……所以其余的格子全部安全。";
+    StepCountRest: "Only {} left to find, and these numbers hold at most {}, so every other hidden cell is a mine.", "根据剩余雷数：还剩 {}没找到，这几个数字周围最多只有 {}……所以其余的格子全是雷。";
+    StepCountRest1: "Only {} left to find, and this number holds at most {}, so every other hidden cell is a mine.", "根据剩余雷数：还剩 {}没找到，这个数字周围最多只有 {}……所以其余的格子全是雷。";
+    StepCountOver: "Then these numbers would need at least {}, but only {} left to find.", "那么这几个数字周围最少要有 {}，可是根据剩余雷数，只剩 {}没找到。";
+    StepCountUnder: "Then even with every other hidden cell a mine there would be at most {}, fewer than the {} left to find.", "那么就算其余的格子全是雷，最多也只有 {}，凑不够剩下的 {}。";
 }
 
 impl S {
