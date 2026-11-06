@@ -3,6 +3,7 @@
 pub mod app;
 pub mod board;
 pub mod game;
+pub mod generate;
 pub mod gfx;
 pub mod icons;
 pub mod locale;
@@ -17,6 +18,8 @@ pub mod ui;
 mod toolbar_tests;
 #[cfg(test)]
 mod lang_tests;
+#[cfg(test)]
+mod generate_tests;
 
 use app::App;
 use game::Level;

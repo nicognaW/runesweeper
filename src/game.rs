@@ -31,6 +31,37 @@ impl Level {
     }
 }
 
+/// How a field's mines are laid, chosen independently of the Level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Mode {
+    /// Windows XP's fields, first-click quirks included.
+    #[default]
+    Classic,
+    /// Fields perfect logic finishes from the first click, which always opens an area.
+    NoGuess,
+}
+
+impl Mode {
+    pub const ALL: [Mode; 2] = [Mode::Classic, Mode::NoGuess];
+
+    /// Whether mines wait for the first click (and are laid by [`crate::generate::lay`]).
+    pub fn lays_on_first_click(self) -> bool {
+        self != Mode::Classic
+    }
+
+    /// The name in the settings file.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Mode::Classic => "classic",
+            Mode::NoGuess => "no-guess",
+        }
+    }
+
+    pub fn from_tag(tag: &str) -> Option<Mode> {
+        Mode::ALL.into_iter().find(|m| m.tag() == tag)
+    }
+}
+
 /// The Custom Field dialog's limits, as Windows clamps them.
 pub fn clamp_custom(w: usize, h: usize, mines: usize) -> (usize, usize, usize) {
     let w = w.clamp(9, 30);
@@ -76,6 +107,7 @@ pub enum Outcome {
     Lost(usize),
 }
 
+#[derive(Clone)]
 pub struct Game {
     pub w: usize,
     pub h: usize,
@@ -95,7 +127,25 @@ pub struct Game {
 
 impl Game {
     pub fn new(w: usize, h: usize, mines: usize, rng: Rng) -> Game {
-        let mut g = Game {
+        let mut g = Game { rng, ..Game::unlaid(w, h, mines) };
+        g.lay_mines();
+        g
+    }
+
+    /// A field with mines at `mines` and nothing open (the new modes' generators lay these).
+    pub fn with_mines(w: usize, h: usize, mines: &[usize]) -> Game {
+        let mut g = Game::unlaid(w, h, mines.len());
+        for &i in mines {
+            g.cells[i].mine = true;
+        }
+        g.count();
+        g
+    }
+
+    /// A field with no mines yet: the new modes lay them on the first click. The counter
+    /// already shows `mines`.
+    pub fn unlaid(w: usize, h: usize, mines: usize) -> Game {
+        Game {
             w,
             h,
             mines: mines.min(w * h - 1),
@@ -106,10 +156,8 @@ impl Game {
             opened: 0,
             flags: 0,
             turn: 0,
-            rng,
-        };
-        g.lay_mines();
-        g
+            rng: Rng::new(0),
+        }
     }
 
     /// Mines are laid when the field is made, as the original does: a column, then a
