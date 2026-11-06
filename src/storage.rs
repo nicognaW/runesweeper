@@ -1,4 +1,4 @@
-//! Settings and best times, kept as `key=value` lines: a file in the user's config folder on
+//! Settings, kept as `key=value` lines: a file in the user's config folder on
 //! desktop, `localStorage` on the web.
 
 use crate::game::Level;
@@ -8,10 +8,6 @@ pub struct Saved {
     pub custom: (usize, usize, usize),
     pub marks: bool,
     pub color: bool,
-    /// Set after the first square is ever opened: the first-run hint stops showing.
-    pub played: bool,
-    /// Best times (seconds) and names for Beginner, Intermediate and Expert.
-    pub best: [(u32, String); 3],
 }
 
 impl Default for Saved {
@@ -21,8 +17,6 @@ impl Default for Saved {
             custom: (9, 9, 10),
             marks: true,
             color: true,
-            played: false,
-            best: std::array::from_fn(|_| (999, "Anonymous".to_string())),
         }
     }
 }
@@ -50,14 +44,7 @@ impl Saved {
                 }
                 "marks" => s.marks = v.trim() == "1",
                 "color" => s.color = v.trim() == "1",
-                "played" => s.played = v.trim() == "1",
-                k if k.starts_with("best") => {
-                    let Ok(i) = k[4..].parse::<usize>() else { continue };
-                    let Some((t, name)) = v.split_once(',') else { continue };
-                    if let (Some(slot), Some(t)) = (s.best.get_mut(i), num(t)) {
-                        *slot = ((t as u32).min(999), name.to_string());
-                    }
-                }
+                // Anything else (the old best times and first-run flag among them) is dropped.
                 _ => {}
             }
         }
@@ -72,11 +59,7 @@ impl Saved {
             Level::Custom => "custom",
         };
         let (w, h, m) = self.custom;
-        let mut out = format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\nplayed={}\n", self.marks as u8, self.color as u8, self.played as u8);
-        for (i, (t, name)) in self.best.iter().enumerate() {
-            out += &format!("best{i}={t},{}\n", name.replace('\n', " "));
-        }
-        out
+        format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.marks as u8, self.color as u8)
     }
 }
 
@@ -161,11 +144,20 @@ mod tests {
         s.level = Level::Expert;
         s.custom = (20, 12, 50);
         s.marks = false;
-        s.best[1] = (88, "Ada, again".into());
         let back = Saved::parse(&s.write());
         assert_eq!(back.level, Level::Expert);
         assert_eq!(back.custom, (20, 12, 50));
         assert!(!back.marks && back.color);
-        assert_eq!(back.best[1], (88, "Ada, again".into()));
+    }
+
+    #[test]
+    fn old_best_times_and_first_run_keys_are_neither_read_nor_written() {
+        let old = "level=intermediate\nmarks=0\nplayed=1\nbest0=12,Ada\nbest1=88,Ada, again\nbest2=301,Bob\n";
+        let back = Saved::parse(old);
+        assert_eq!(back.level, Level::Intermediate);
+        assert!(!back.marks);
+        let out = back.write();
+        assert!(!out.contains("best"), "no best-time keys written: {out}");
+        assert!(!out.contains("played"), "no first-run key written: {out}");
     }
 }

@@ -1,6 +1,6 @@
 # Runesweeper
 
-Minesweeper with the rules, menus and quirks of the Windows classic, drawn on the GPU with
+Minesweeper with the rules and quirks of the Windows classic, drawn on the GPU with
 [Rune](https://github.com/anomalyco/rune): springs, ripples, liquid-metal chrome, plastic, fire
 and shockwaves.
 
@@ -18,7 +18,7 @@ and shockwaves.
 </p>
 <p align="center">
   <img src="docs/won.webp" alt="A won game" width="40%">
-  <img src="docs/menu.webp" alt="The Game menu" width="40%">
+  <img src="docs/picker.webp" alt="The Level picker" width="40%">
 </p>
 
 ## What moves, and what doesn't
@@ -30,8 +30,10 @@ that couldn't were cut.
 - **Every click** (hundreds a game): the tile lifts off in 240 ms, rippling out from the click
   over at most 300 ms. Numbers are there at once; nothing makes you wait to read them. The
   selector sits on the square under the pointer, with no glide to lag behind it.
-- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2) never animate.
-- **A new field** from the face or the menu deals in from the centre in under half a second;
+- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2, Escape) never animate.
+- **Panels** (the Level picker, Settings) are opened now and then, so they slide down from the
+  toolbar in about 0.2 s; Escape closes one in the same frame.
+- **A new field** from the face or the picker deals in from the centre in under half a second;
   from F2 it's simply there, old field gone in the same frame.
 - **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
   out from the one you hit, then still.
@@ -48,12 +50,13 @@ Motion is checked with Rune's motion gate (pops, jumps, snaps, overshoot that wa
 
 ```sh
 RUNE_MOTION_GATE=gate.txt runesweeper --scene beginner --script scripts/play.json --duration 4.5 --out frames
-RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: keys.json, won, first-run
+RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: keys.json, panels.json, won, picker
 ```
 
-Every scenario reports nothing except the scripts that press F2 (`play.json`, `keys.json`), where
-the one-frame swap shows up as the old field's tiles leaving unanimated: a deliberate cut for a
-keyboard action.
+Every scenario reports nothing except the scripts that press a key with something to remove:
+F2 in `play.json` and `keys.json`, where the one-frame swap shows up as the old field's tiles
+leaving unanimated, and Escape in `panels.json`, where the picker leaves the same way. Both are
+deliberate cuts for a keyboard action.
 
 Frame cost stays small: `cargo run --release --example bench` times Rune's work per frame on
 Expert (view, diff, layout, draw lists) at 0.4 ms median and 0.7 ms p95, even while a press is
@@ -96,19 +99,19 @@ release; tagged versions are on [Releases](https://github.com/nicognaW/runesweep
 The same game as Windows Minesweeper:
 
 - **Left click** opens a square. Press and drag: the square under the pointer stays sunk until you let go, and the face gasps.
-- **Right click** cycles flag → `?` → blank (`?` only with *Game ▸ Marks*).
-- **Keyboard**: arrows move the selector, Space opens (or chords on a number), F flags, F2 starts again.
-- **Touch** (the web build): the *Flag* button in the menu bar makes taps place flags; a tap on a number chords.
+- **Right click** cycles flag → `?` → blank (`?` only with *Marks* on in Settings).
+- **Keyboard**: arrows move the selector, Space opens (or chords on a number), F flags, F2 starts again, Escape closes a panel.
+- **Touch** (the web build): the flag toggle on the toolbar makes taps place flags while it is lit; a tap on a number chords.
 - **Chord**: on a number whose flags are all placed, press both buttons (or the middle one) to open its other neighbours. A wrong flag loses.
 - Mines come from the Microsoft C runtime's `rand()`, seeded once per session from a millisecond clock, as `srand(GetTickCount())`: a column, then a row, each `rand() % n`, redrawn while the square already holds a mine.
 - A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
-- **Game** menu: New (F2), Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99), Custom (9–24 × 9–30, up to (h−1)(w−1) mines), Marks, Color, Best Times, Exit.
-- **Best Times** keeps the fastest name per level; beat one and you're asked for your name.
+- **Toolbar**: the chip on the left shows the Level and opens the picker: Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
+- **Settings** (the button on the right): Marks (?) and Color.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 
-Settings and best times are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,
+Settings are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,
 `~/.config/runesweeper`, or the browser's local storage.
 
 `--plain` (desktop) or `?plain` (web) turns the shader effects off for weak GPUs.
@@ -150,6 +153,7 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
 - `src/solver/`: proofs, exact odds, the bot and its benchmark (`examples/solver.rs`).
 - `src/app.rs`: state, input (press, chord, flag), the clock, keys.
 - `src/board.rs`, `src/ui.rs`, `src/icons.rs`, `src/style.rs`: the view, vector art and palettes.
+- `src/toolbar.rs`: the toolbar and the panels it opens.
 - `src/gfx.rs`: the compositor that turns effect slots into `rune-fx` shaders.
 - `vendor/rune-fx`: Rune's effects crate with a one-line fix so it builds for wasm.
 

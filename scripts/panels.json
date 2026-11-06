@@ -1,0 +1,7 @@
+{"events": [
+  {"t": 0.8, "type": "tap", "x": 60, "y": 26},
+  {"t": 1.6, "type": "key", "name": "Escape"},
+  {"t": 2.2, "type": "tap", "x": 296, "y": 25},
+  {"t": 3.0, "type": "tap", "x": 296, "y": 25},
+  {"t": 3.8, "type": "mark", "name": "end"}
+]}

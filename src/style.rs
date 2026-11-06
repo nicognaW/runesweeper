@@ -1,4 +1,4 @@
-//! Colours, sizes and the two palettes (Color on, and the monochrome the Color menu item
+//! Colours, sizes and the two palettes (Color on, and the monochrome the Color setting
 //! switches to).
 
 use rune::{Color, Shadow, TextStyle};
@@ -22,7 +22,8 @@ pub const WELL: f32 = 6.0;
 /// The console's padding.
 pub const PAD: f32 = 14.0;
 pub const HEADER_H: f32 = 58.0;
-pub const MENU_H: f32 = 34.0;
+/// The toolbar over the console.
+pub const TOOLBAR_H: f32 = 44.0;
 pub const MARGIN: f32 = 22.0;
 
 pub const NUMBER: TextStyle = TextStyle::new(16.0, 700.0).features("'tnum' 1");
@@ -37,7 +38,7 @@ pub fn window_size(w: usize, h: usize) -> (f32, f32) {
     let board_h = h as f32 * PITCH - GAP + 2.0 * WELL;
     let console_w = board_w.max(9.0 * PITCH + 2.0 * WELL) + 2.0 * PAD;
     let console_h = board_h + HEADER_H + 12.0 + 2.0 * PAD;
-    ((console_w + 2.0 * MARGIN).max(330.0), console_h + MENU_H + 2.0 * MARGIN)
+    ((console_w + 2.0 * MARGIN).max(330.0), console_h + TOOLBAR_H + 2.0 * MARGIN)
 }
 
 #[derive(Clone, Copy)]

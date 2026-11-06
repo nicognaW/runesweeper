@@ -8,7 +8,11 @@ pub mod icons;
 pub mod solver;
 pub mod storage;
 pub mod style;
+pub mod toolbar;
 pub mod ui;
+
+#[cfg(test)]
+mod toolbar_tests;
 
 use app::App;
 use game::Level;
@@ -16,7 +20,7 @@ use rune::AppSpec;
 use storage::Saved;
 
 fn scene(level: Level, seed: u32) -> App {
-    let saved = Saved { level, played: true, ..Saved::default() };
+    let saved = Saved { level, ..Saved::default() };
     App::with(saved, seed)
 }
 
@@ -72,21 +76,14 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         a.new_best = true;
         a.moments.won = Some(0.05);
     }),
-    ("menu", |a| {
+    ("picker", |a| {
         *a = scene(Level::Beginner, 7);
-        a.menu = Some(app::Menu::Game);
+        play(a, &[(4, 4)]);
+        a.toggle_panel(app::Panel::Picker);
     }),
-    ("custom", |a| {
+    ("settings", |a| {
         *a = scene(Level::Beginner, 7);
-        a.open_custom();
-    }),
-    ("best", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.dialog = Some(app::Dialog::BestTimes);
-    }),
-    ("first-run", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.saved.played = false;
+        a.toggle_panel(app::Panel::Settings);
     }),
     ("icon", |a| {
         *a = scene(Level::Beginner, 7);
@@ -98,22 +95,10 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         play(a, &[(8, 8)]);
     }),
     // States for checking every screen by eye.
-    ("help-menu", |a| {
+    ("flagging", |a| {
         *a = scene(Level::Beginner, 7);
-        a.menu = Some(app::Menu::Help);
-    }),
-    ("record", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.edit_name = rune::TextEdit::new("Anonymous");
-        a.dialog = Some(app::Dialog::Record(0));
-    }),
-    ("about", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.dialog = Some(app::Dialog::About);
-    }),
-    ("howto", |a| {
-        *a = scene(Level::Beginner, 7);
-        a.dialog = Some(app::Dialog::HowTo);
+        a.touch = true;
+        a.flag_mode = true;
     }),
     ("press", |a| {
         *a = scene(Level::Intermediate, 11);
@@ -157,7 +142,7 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         a.saved.color = false;
     }),
     ("custom-max", |a| {
-        let saved = Saved { level: Level::Custom, custom: (30, 24, 667), played: true, ..Saved::default() };
+        let saved = Saved { level: Level::Custom, custom: (30, 24, 667), ..Saved::default() };
         *a = App::with(saved, 3);
         play(a, &[(0, 0), (29, 23)]);
     }),
@@ -177,9 +162,7 @@ pub fn spec() -> AppSpec<App> {
 fn initial_size() -> (f32, f32) {
     let saved = storage::load();
     let (w, h, _) = saved.level.dims().unwrap_or(saved.custom);
-    let (ww, wh) = style::window_size(w, h);
-    // Room for the how-to-play lines under the console the first time.
-    (ww, if saved.played { wh } else { wh + 48.0 })
+    style::window_size(w, h)
 }
 
 /// Effects off: `--plain` on desktop, `?plain` on the web (for GPUs that struggle).
