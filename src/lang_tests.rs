@@ -13,11 +13,11 @@ fn han(w: &str) -> bool {
     w.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
 }
 
-/// No English left on screen: the only Latin letters are F2's and the switch's own
-/// "English", which names the language in itself.
+/// No English left on screen: the only Latin letters are F2's, the font credit's "MiSans"
+/// (a name) and the switch's own "English", which names the language in itself.
 fn assert_all_zh_cn(rt: &Runtime<App>, when: &str) {
     for w in words(rt) {
-        let rest = w.replace("F2", "").replace(Lang::En.endonym(), "");
+        let rest = w.replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
         assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English ({when})");
     }
 }
@@ -115,4 +115,16 @@ fn the_result_banner_speaks_zh_cn() {
     settle(&mut rt);
     assert!(words(&rt).iter().any(|w| w == "胜利！用时 37 秒"), "{:?}", words(&rt));
     assert_all_zh_cn(&rt, "a win");
+}
+
+#[test]
+fn settings_credits_misans_once_in_either_language() {
+    for (saved, credit) in [(Saved::default(), "Chinese text: MiSans by Xiaomi"), (zh(), "中文字体：小米 MiSans")] {
+        let mut rt = runtime(saved);
+        assert!(!words(&rt).iter().any(|w| w.contains("MiSans")), "no credit until Settings opens");
+        click(&mut rt, "settings-button");
+        settle(&mut rt);
+        let credits: Vec<String> = words(&rt).into_iter().filter(|w| w.contains("MiSans")).collect();
+        assert_eq!(credits, [credit], "one credit line in Settings");
+    }
 }

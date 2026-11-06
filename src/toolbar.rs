@@ -201,7 +201,9 @@ fn settings(s: &App, k: &Kit, p: &Palette) -> El {
         .gap(6.0)
         .child(setting("marks-switch", s.tr(S::Marks), s.saved.marks, App::toggle_marks, k, p))
         .child(setting("color-switch", s.tr(S::Color), s.saved.color, App::toggle_color, k, p))
-        .child(language(s, p));
+        .child(language(s, p))
+        // The credit MiSans's licence asks for (ADR 0003).
+        .child(el().key("font-credit").px(12.0).pt(4.0).child(text(s.tr(S::FontCredit)).font(SMALL).color(p.muted)));
     surface("settings", s.tr(S::Settings), "settings-button", Align::End, body, p)
 }
 

@@ -44,6 +44,16 @@ codegen-units = 1
 lto = "thin"
 incremental = false
 
+[dev-dependencies]
+# Already in the tree through Rune's text stack; the font tests read cmaps and names with it.
+skrifa = "0.44"
+
+[build-dependencies]
+# Cuts the MiSans subset at build time (build.rs), in pure Rust.
+fontcull-klippa = "0.1.2"
+fontcull-skrifa = "0.39.2"
+fontcull-write-fonts = { version = "0.44.3", features = ["read"] }
+
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
