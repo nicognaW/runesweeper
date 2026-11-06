@@ -97,6 +97,7 @@ strings! {
     Marks: "Marks (?)", "问号标记";
     Color: "Color", "颜色";
     Language: "Language", "语言";
+    FontCredit: "Chinese text: MiSans by Xiaomi", "中文字体：小米 MiSans";
 }
 
 impl S {

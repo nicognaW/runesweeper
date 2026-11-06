@@ -41,7 +41,7 @@ jobs:
         run: |
           d=runesweeper-linux-x86_64
           mkdir $d
-          cp target/dist/runesweeper packaging/runesweeper.desktop packaging/runesweeper.png packaging/install-linux.sh README.md LICENSE $d/
+          cp target/dist/runesweeper packaging/runesweeper.desktop packaging/runesweeper.png packaging/install-linux.sh README.md LICENSE NOTICES.txt $d/
           tar czf $d.tar.gz $d
       - uses: actions/upload-artifact@v4
         with:
@@ -59,7 +59,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory runesweeper-windows-x86_64 | Out-Null
-          Copy-Item target/dist/runesweeper.exe, README.md, LICENSE runesweeper-windows-x86_64/
+          Copy-Item target/dist/runesweeper.exe, README.md, LICENSE, NOTICES.txt runesweeper-windows-x86_64/
           Compress-Archive runesweeper-windows-x86_64/* runesweeper-windows-x86_64.zip
       - uses: actions/upload-artifact@v4
         with:
@@ -87,8 +87,9 @@ jobs:
             target/aarch64-apple-darwin/dist/runesweeper target/x86_64-apple-darwin/dist/runesweeper
           sed "s/VERSION/$version/g" packaging/Info.plist > $app/Contents/Info.plist
           cp assets/icon.icns $app/Contents/Resources/icon.icns
+          cp NOTICES.txt $app/Contents/Resources/NOTICES.txt
           codesign --force --deep -s - $app
-          mkdir dmg && cp -R $app dmg/ && ln -s /Applications dmg/Applications
+          mkdir dmg && cp -R $app NOTICES.txt dmg/ && ln -s /Applications dmg/Applications
           hdiutil create -volname Runesweeper -srcfolder dmg -ov -format UDZO runesweeper-macos-universal.dmg
       - uses: actions/upload-artifact@v4
         with:
