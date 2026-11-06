@@ -293,8 +293,16 @@ pub fn advise(v: &View, flags: &[bool], last: Option<usize>, field: &Field) -> H
 }
 
 /// The hint for the open numbers in `v`, with the player's flags at `flags` and their last
-/// move at `last`. A wrong flag comes first; then the fewest numbers, a named pattern, a safe
-/// cell before a mine, and the nearest the last move.
+/// move at `last`.
+///
+/// A provably wrong flag comes first (#10: "the first hint says so before anything else").
+/// Then one sort key:
+/// - the fewest numbers, and at the same count a named pattern before raw logic. #16 has a
+///   named pattern beat raw logic "on the same numbers", then the fewest numbers; #10's
+///   "prefer a named pattern, then the fewest numbers" reads the same way here, as a pattern
+///   on more numbers is no cheaper to see than logic on fewer.
+/// - a safe cell before a mine: #10, "at equal cost, a safe cell is preferred to a mine".
+/// - the nearest the last move (#10, #16).
 pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
     let cs = constraints(v, &vec![Fact::Unknown; v.len()]);
     let mut found = Vec::new();
