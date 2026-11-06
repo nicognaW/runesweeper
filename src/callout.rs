@@ -23,7 +23,8 @@ impl App {
     /// The Hint action: a fresh hint at its nudge, or one stage deeper into the one shown.
     /// Each fresh hint counts in the game's record, which makes it an assisted game.
     pub fn press_hint(&mut self) {
-        if self.game.over() {
+        // A field being generated takes no input.
+        if self.game.over() || self.generating.is_some() {
             return;
         }
         if let Some(s) = &mut self.hint {

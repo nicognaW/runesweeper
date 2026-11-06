@@ -8,6 +8,10 @@
 //! the same with the bot at Gentle strength, so its fields are No Guess fields that pattern
 //! play finishes.
 
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::game::{Game, Mode, Rng};
 use crate::solver::{Strength, play};
 
@@ -42,10 +46,30 @@ fn redraw_until_clear(w: usize, h: usize, mines: usize, seed: u64, first: usize,
     loop {
         attempts += 1;
         let g = Game::with_mines(w, h, &rng.pick(&free, mines));
-        if play::clears(&g, first, strength) {
+        if play::clears(&g, first, strength) || stopped() {
             return (g, attempts);
         }
     }
+}
+
+thread_local! {
+    static STOP: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
+}
+
+/// Runs `f`, a call to [`lay`], so that it gives up soon after `stop` is set: a long search
+/// checks [`stopped`] between steps and returns what it holds, which the caller throws away.
+/// A generation off the UI thread runs this way, so a cancelled one stops.
+pub fn stoppable<T>(stop: Arc<AtomicBool>, f: impl FnOnce() -> T) -> T {
+    let before = STOP.with(|s| s.replace(Some(stop)));
+    let out = f();
+    STOP.with(|s| s.replace(before));
+    out
+}
+
+/// Whether the [`stoppable`] call this runs in was told to stop. Every search that can run
+/// long checks it between steps; outside `stoppable` it is false, so [`lay`] runs to the end.
+pub fn stopped() -> bool {
+    STOP.with(|s| s.borrow().as_ref().is_some_and(|f| f.load(Ordering::Relaxed)))
 }
 
 /// The new modes' random numbers: SplitMix64, the same on every platform.

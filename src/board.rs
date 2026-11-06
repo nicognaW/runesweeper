@@ -202,6 +202,21 @@ pub fn view(s: &App, reduced: bool) -> El {
         .motion_intent(if s.deal { MotionIntent::NONE } else { MotionIntent::CUT })
         .children(opens)
         .children(covers);
+    // A field taking its time: a slow band of light over the hidden tiles, gone in the frame
+    // the field lands.
+    if let Some(t0) = s.sweep_from {
+        board = board.child(
+            effect(gfx::SWEEP)
+                .key("sweep")
+                .effect_data([t0 as f32, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0])
+                .absolute(WELL - 1.0, WELL - 1.0)
+                .size(bw - 2.0 * WELL + 2.0, bh - 2.0 * WELL + 2.0)
+                .radius(6.0)
+                .transition(Transition::none())
+                .motion_intent(MotionIntent::CUT)
+                .inert(),
+        );
+    }
     // The hint's numbers and cell, ringed.
     board = board.children(crate::callout::rings(s, &p));
     // The selector sits on the cell under the pointer, without re-running the view.

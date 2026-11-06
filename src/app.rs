@@ -2,11 +2,12 @@
 
 use std::time::Duration;
 
-use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx};
+use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx, Waker};
 
 use crate::callout::Shown;
 use crate::game::{Cover, Game, Level, Mode, Outcome, Rng, Status, clamp_custom};
 use crate::generate::{self, Stream};
+use crate::generating::{self, Generating, Lay};
 use crate::icons::Mood;
 use crate::record::{self, Act, End, Layout, Move, Record};
 use crate::solver::play;
@@ -63,6 +64,19 @@ pub struct App {
     pub unlaid: bool,
     /// The field was just laid: the clock starts at the next poll, so laying never counts.
     pub clock_waits: bool,
+    /// The field the first click asked for, being generated off the UI thread. The face
+    /// thinks and the field takes no input until it lands.
+    pub generating: Option<Generating>,
+    /// When that generation started, on the poll clock (stamped by the first poll after the
+    /// click, as the click's own clock may be stale).
+    pub generating_since: Option<f64>,
+    /// When the band of light over the hidden tiles started, 600 ms into a generation that is
+    /// still running (on the poll clock).
+    pub sweep_from: Option<f64>,
+    /// What lays the new modes' fields: [`generate::lay`] (tests slow it down).
+    pub lay: Lay,
+    /// Wakes the window when a field lands (from `AppSpec::setup`; none headless).
+    pub waker: Option<Waker>,
     pub saved: Saved,
     /// The language every string is in: the one picked in Settings, else the system's.
     pub lang: Lang,
@@ -155,6 +169,11 @@ impl App {
             seed: 0,
             unlaid: false,
             clock_waits: false,
+            generating: None,
+            generating_since: None,
+            sweep_from: None,
+            lay: generate::lay,
+            waker: None,
             saved,
             field: 0,
             now: 0.0,
@@ -231,10 +250,15 @@ impl App {
         self.record = Record::new(self.mode, (w, h, m));
         self.record_t0 = None;
         self.clock_waits = false;
+        // A field still generating is cancelled: it never lands.
+        self.generating = None;
+        self.generating_since = None;
+        self.sweep_from = None;
         self.unlaid = self.mode.lays_on_first_click();
         if self.unlaid {
             self.seed = self.seeds.next_u64();
             self.game = Game::unlaid(w, h, m);
+            generating::warm();
         } else {
             // One stream for the whole session, as Windows seeds once at startup.
             self.game = Game::new(w, h, m, self.rng);
@@ -242,19 +266,47 @@ impl App {
         }
     }
 
-    /// The new modes' first click: the field its mode, level, seed and click name, with any
-    /// marks already placed kept. On the UI thread for now; it is one call, so it can move.
+    /// The new modes' first click: starts generating the field its mode, level, seed and
+    /// click name, off the UI thread.
     fn lay_at(&mut self, first: usize) {
-        let mut g = generate::lay(self.mode, self.dims(), self.seed, first);
+        self.generating = Some(Generating::start(self.lay, self.mode, self.dims(), self.seed, first, self.waker.clone()));
+        self.generating_since = None;
+        self.sweep_from = None;
+    }
+
+    /// The generated field lands: any marks already placed are kept, and the first click
+    /// opens it. The clock starts at the next poll.
+    fn land(&mut self, mut g: Game, first: usize) {
+        self.generating = None;
+        self.generating_since = None;
+        self.sweep_from = None;
         for (c, old) in g.cells.iter_mut().zip(&self.game.cells) {
             c.cover = old.cover;
         }
         g.flags = self.game.flags;
         self.game = g;
         self.record.layout = Layout::Seeded { seed: self.seed, first };
+        // The record's clock, like the timer, starts with the field: generating never counts.
+        self.record_t0 = Some(self.now);
         self.unlaid = false;
         self.clock_waits = true;
+        self.play(false, first);
+        if self.game.cells[first].cover == Cover::Open {
+            self.hover_on.set(0.0);
+        }
     }
+
+    /// Waits for a field being generated and lands it (scenes and tests).
+    pub fn finish_laying(&mut self) {
+        if let Some(job) = self.generating.take() {
+            let first = job.first;
+            let g = job.wait();
+            self.land(g, first);
+        }
+    }
+
+    /// How long a generation runs before the sweep shows it is still working.
+    pub const SWEEP_AFTER: f64 = 0.6;
 
     fn fresh_field(&mut self) {
         self.abandon();
@@ -288,6 +340,9 @@ impl App {
     }
 
     pub fn mood(&self) -> Mood {
+        if self.generating.is_some() {
+            return Mood::Think;
+        }
         match self.game.status {
             Status::Won => Mood::Cool,
             Status::Lost => Mood::Dead,
@@ -330,7 +385,8 @@ impl App {
 
     /// A right click on cell `i`.
     pub fn mark_at(&mut self, i: usize) {
-        if self.game.over() {
+        // A field being generated takes no input.
+        if self.game.over() || self.generating.is_some() {
             return;
         }
         self.note(Act::Mark { marks: self.saved.marks }, i);
@@ -390,9 +446,10 @@ impl App {
         }
     }
 
-    /// A field just laid starts its clock at the next poll: ask for one now.
+    /// A field just laid starts its clock at the next poll, and a generation just started
+    /// stamps its start there: ask for one now.
     fn wake_clock(&self, tx: &mut Tx) {
-        if self.clock_waits {
+        if self.clock_waits || (self.generating.is_some() && self.generating_since.is_none()) {
             tx.wake_after(Duration::ZERO);
         }
     }
@@ -400,6 +457,10 @@ impl App {
     /// A release on the board.
     fn release(&mut self, chord: bool, cell: Option<usize>) {
         let Some(i) = cell else { return };
+        // A field being generated takes no input.
+        if self.generating.is_some() {
+            return;
+        }
         if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
             self.mark_at(i);
             return;
@@ -422,10 +483,17 @@ impl App {
                 return;
             }
             self.lay_at(i);
-        } else if !self.game.started && !chord {
+            return;
+        }
+        if !self.game.started && !chord {
             // Classic keeps its field as dealt: replaying the first click moves a mine again.
             self.record.layout = Layout::Mines((0..self.game.cells.len()).filter(|&j| self.game.cells[j].mine).collect());
         }
+        self.play(chord, i);
+    }
+
+    /// Opens or chords on `i` of a laid field.
+    fn play(&mut self, chord: bool, i: usize) {
         // A forced guess: this click can open a cell, and none could be proven safe.
         let cover = self.game.cells[i].cover;
         let opens = if chord { cover == Cover::Open } else { matches!(cover, Cover::Hidden | Cover::Question) };
@@ -501,7 +569,7 @@ impl App {
         let cell = self.cell_at(d.x, d.y);
         match d.phase {
             rune::Phase::Down => {
-                if self.game.over() {
+                if self.game.over() || self.generating.is_some() {
                     return;
                 }
                 match button {
@@ -533,7 +601,7 @@ impl App {
     }
 
     pub fn on_board_secondary(&mut self, x: f32, y: f32, _tx: &mut Tx) {
-        if self.game.over() {
+        if self.game.over() || self.generating.is_some() {
             return;
         }
         if self.press.left {
@@ -574,6 +642,9 @@ impl App {
 
     pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.now = now;
+        if self.generating.is_some() && self.poll_generation(tx) {
+            return true;
+        }
         if let Some((t, _)) = self.moments.boom.filter(|_| !self.shock_done) {
             if now - t >= crate::gfx::SHOCK_FOR {
                 self.shock_done = true;
@@ -606,6 +677,39 @@ impl App {
         tx.wake_after(Duration::from_secs_f64(next.max(0.01)));
         if secs != self.seconds {
             self.seconds = secs;
+            return true;
+        }
+        false
+    }
+
+    /// A generation under way: lands its field once ready (true), else stamps its start and
+    /// asks for the poll that starts the sweep. The view changes only when the field lands
+    /// or the sweep starts.
+    fn poll_generation(&mut self, tx: &mut Tx) -> bool {
+        let Some(job) = &mut self.generating else { return false };
+        if let Some(g) = job.take() {
+            let first = job.first;
+            self.land(g, first);
+            // The clock starts in this same poll.
+            self.clock_waits = false;
+            self.start_clock();
+            tx.wake_after(Duration::from_secs(1));
+            return true;
+        }
+        // Without a waker nothing says when the field lands: look a few times a second.
+        let check = if self.waker.is_some() { f64::INFINITY } else { 1.0 / 30.0 };
+        let since = *self.generating_since.get_or_insert(self.now);
+        let due = since + Self::SWEEP_AFTER - self.now;
+        if due > 0.0 {
+            tx.wake_after(Duration::from_secs_f64(due.min(check)));
+            return false;
+        }
+        if check.is_finite() {
+            tx.wake_after(Duration::from_secs_f64(check));
+        }
+        // The sweep mounts at the first poll past 600 ms.
+        if self.sweep_from.is_none() {
+            self.sweep_from = Some(since + Self::SWEEP_AFTER);
             return true;
         }
         false

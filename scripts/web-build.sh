@@ -29,5 +29,6 @@ fi
 
 "$rune/scripts/web-build.sh" runesweeper --out dist/web --no-html
 cp web/index.html dist/web/index.html
+cp web/worker.js dist/web/worker.js
 cp packaging/runesweeper.png dist/web/icon.png
 cp NOTICES.txt dist/web/NOTICES.txt
