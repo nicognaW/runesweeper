@@ -16,6 +16,14 @@ _Avoid_: Generator, variant, game type
 The Mode that lays mines exactly as Windows XP does, first-click quirks included.
 _Avoid_: OG, original, normal
 
+**Patterns**:
+The Mode whose fields can always be finished without guessing, using only deductions from one number or two overlapping numbers, plus the mine count near the end.
+_Avoid_: Easy no-guess
+
+**No Guess**:
+The Mode whose fields can always be finished without guessing by perfect logic, including the count of mines left.
+_Avoid_: Guess-free, NG, solvable mode
+
 **Max Guess**:
 The Mode whose fields are built to force as many true 50/50s as possible, and are otherwise solvable by logic.
 _Avoid_: Evil, cruel, hard mode
@@ -39,8 +47,18 @@ _Avoid_: Coin flip
 ## Help
 
 **Hint**:
-On request, the simplest next deduction, revealed step by step, with the reason in words a player would use.
+On request, the simplest next deduction, or when none exists the reasoning a strong player would use to pick a guess, revealed step by step in a player's words.
 _Avoid_: Clue, solver, help
 
 **Assisted game**:
 A game in which at least one Hint was shown.
+
+## Records
+
+**Game record**:
+What is kept about one game that was won, lost, or abandoned after its first click.
+_Avoid_: Score, entry
+
+**History**:
+All game records, kept without limit.
+_Avoid_: Best times, high scores, stats
