@@ -129,7 +129,7 @@ strings! {
     MarkForced: "Forced guess", "必须猜";
     MarkChord: "A chord saves clicks", "双击可省点击";
     SumNeedless: "You opened a cell nothing proved, while a safe cell could be proven.", "这一步猜了一格，其实这时已经能推出安全格。";
-    SumMissed: "You paused {} here, while a safe cell could be proven.", "你在这里停了 {}，其实这时已经能推出安全格。";
+    SumMissed: "You paused {} here, while a cell could be proven.", "你在这里停了 {}，其实这时已经有格子能推出来。";
     SumForced: "No cell could be proven safe: the guess was forced, but not a true 50/50.", "推不出任何安全格，只能猜，但这不是死猜。";
     SumForcedFifty: "No cell could be proven safe: the guess was forced, a true 50/50.", "推不出任何安全格，只能猜：这是死猜。";
     ChordReason1: "This {} has its {} flagged, so the cells left around it are safe. One chord on it opens them all: 1 click saved.", "看这个 {}，它周围的 {}都已标好……所以剩下的格子都安全。在它上面双击一次就能全部打开，省下 1 次点击。";

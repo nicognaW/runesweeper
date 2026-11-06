@@ -70,6 +70,21 @@ fn a_needless_guess_or_a_missed_deduction_shows_the_proof_of_a_safe_cell() {
 }
 
 #[test]
+fn a_pause_while_only_a_mine_could_be_proven_is_a_missed_deduction_too() {
+    // The first click opens a 3 in the corner: its three cells are proven mines, and nothing
+    // is proven safe. A 6 s pause before flagging one of them misses that deduction.
+    let rows = [".*....", "**....", ".....*"];
+    let r = Review::of(&scripted(&rows, End::Abandoned, &[(0, 'o', 0, 0), (6000, 'f', 1, 0)]));
+    assert_eq!(kinds(&r), [(1, Kind::Missed { pause_ms: 6000 })]);
+    let t = r.hint(0).target.expect("a cell");
+    assert_eq!(t.verdict, Verdict::Mine);
+    assert!([1, 6, 7].contains(&t.cell), "names one of the 3's mines, not {}", t.cell);
+    // Once all three are flagged, a pause misses nothing: no unflagged cell is provable.
+    let r = Review::of(&scripted(&rows, End::Abandoned, &[(0, 'o', 0, 0), (500, 'f', 1, 0), (900, 'f', 0, 1), (1300, 'f', 1, 1), (9000, 'o', 4, 0)]));
+    assert_eq!(kinds(&r), [(4, Kind::Forced { fifty: false })]);
+}
+
+#[test]
 fn a_forced_guess_says_whether_it_was_a_true_fifty_fifty() {
     let r = Review::of(&game());
     let forced = r.hint(r.markers.iter().position(|m| matches!(m.kind, Kind::Forced { .. })).unwrap());
