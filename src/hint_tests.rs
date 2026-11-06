@@ -6,30 +6,16 @@
 use rune::{Env, Key, Runtime};
 
 use crate::app::App;
-use crate::game::{Cover, Game, Level, Status};
+use crate::game::{Cover, Game, Level};
 use crate::hint::Verdict;
 use crate::storage::Saved;
 use crate::strings::Lang;
 use crate::toolbar_tests::{click, press, runtime, settle, shown, text_in, words};
 use crate::ui;
 
-/// A field drawn as rows: `.` open, `#` hidden safe, `*` hidden mine, `F` flagged mine, `x`
-/// flagged safe.
+/// A position drawn as rows, as [`crate::test_fields::position`] reads them.
 fn field(rows: &[&str]) -> Game {
-    let w = rows[0].len();
-    let at = |c: char| rows.iter().enumerate().flat_map(move |(y, r)| r.char_indices().filter(move |&(_, ch)| ch == c).map(move |(x, _)| y * w + x)).collect::<Vec<_>>();
-    let mut g = Game::with_mines(w, rows.len(), &[at('*'), at('F')].concat());
-    for i in at('.') {
-        g.cells[i].cover = Cover::Open;
-        g.opened += 1;
-    }
-    for i in [at('F'), at('x')].concat() {
-        g.cells[i].cover = Cover::Flag;
-        g.flags += 1;
-    }
-    g.started = true;
-    g.status = Status::Playing;
-    g
+    crate::test_fields::position(rows)
 }
 
 /// 1-1 from the left wall, on a field wide enough for the toolbar.
@@ -176,7 +162,7 @@ fn hint_text_never_gives_odds_in_either_language() {
                         assert!(!l.contains(banned), "{w:?}");
                     }
                     if lang == Lang::ZhCn {
-                        let rest = w.replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
+                        let rest = w.replace("MiSans", "").replace(Lang::En.endonym(), "");
                         assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English");
                     }
                 }

@@ -293,16 +293,60 @@ pub fn unix_ms() -> u64 {
     }
 }
 
-/// Minutes to add to UTC for the player's local time: the browser's on the web; UTC on
-/// desktop, which has no time zone lookup without another dependency.
-pub fn utc_offset_minutes() -> i64 {
+/// Minutes to add to UTC for the player's local time at `ms` since the Unix epoch, daylight
+/// saving included: the browser's on the web, the system's time zone natively (no new
+/// dependency: the C library's `localtime_r`, or Windows' own conversion).
+pub fn utc_offset_minutes(ms: u64) -> i64 {
     #[cfg(target_arch = "wasm32")]
     {
-        -(js_sys::Date::new_0().get_timezone_offset() as i64)
+        -(js_sys::Date::new(&(ms as f64).into()).get_timezone_offset() as i64)
     }
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(unix)]
     {
-        0
+        use std::ffi::{c_char, c_int, c_long};
+        /// C's `struct tm` as glibc, musl and macOS lay it out.
+        #[repr(C)]
+        struct Tm {
+            fields: [c_int; 9],
+            gmtoff: c_long,
+            zone: *const c_char,
+        }
+        unsafe extern "C" {
+            fn tzset();
+            fn localtime_r(t: *const c_long, out: *mut Tm) -> *mut Tm;
+        }
+        let t = (ms / 1000) as c_long;
+        let mut tm = Tm { fields: [0; 9], gmtoff: 0, zone: std::ptr::null() };
+        // SAFETY: `t` and `tm` are valid for the call, which only writes `tm`.
+        let ok = unsafe {
+            tzset();
+            !localtime_r(&t, &mut tm).is_null()
+        };
+        if ok { tm.gmtoff as i64 / 60 } else { 0 }
+    }
+    #[cfg(windows)]
+    {
+        /// FILETIME, as one count of 100 ns since 1601.
+        #[repr(C)]
+        #[derive(Default)]
+        struct FileTime(u32, u32);
+        #[repr(C)]
+        #[derive(Default)]
+        struct SystemTime([u16; 8]);
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn FileTimeToSystemTime(ft: *const FileTime, st: *mut SystemTime) -> i32;
+            fn SystemTimeToTzSpecificLocalTime(tz: *const std::ffi::c_void, utc: *const SystemTime, local: *mut SystemTime) -> i32;
+            fn SystemTimeToFileTime(st: *const SystemTime, ft: *mut FileTime) -> i32;
+        }
+        let ticks = (ms + 11_644_473_600_000) * 10_000;
+        let utc = FileTime(ticks as u32, (ticks >> 32) as u32);
+        let (mut st, mut local, mut back) = (SystemTime::default(), SystemTime::default(), FileTime::default());
+        // SAFETY: every pointer is to a live local of the type the call takes; a null zone is
+        // the system's current one.
+        let ok = unsafe { FileTimeToSystemTime(&utc, &mut st) != 0 && SystemTimeToTzSpecificLocalTime(std::ptr::null(), &st, &mut local) != 0 && SystemTimeToFileTime(&local, &mut back) != 0 };
+        let local_ticks = ((back.1 as u64) << 32) | back.0 as u64;
+        if ok { (local_ticks as i64 - ticks as i64) / 600_000_000 } else { 0 }
     }
 }
 
@@ -322,6 +366,32 @@ pub fn seed() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// History's dates are the player's local time, daylight saving included, for the
+    /// moment each game was played. Checked in a child run per time zone (POSIX zone strings,
+    /// which need no time zone files), against offsets worked by hand.
+    #[cfg(unix)]
+    #[test]
+    fn native_dates_are_local_time_for_each_moment() {
+        // 2023-01-15 12:00 and 2023-07-15 12:00 UTC.
+        let (winter, summer) = (1_673_784_000_000, 1_689_422_400_000);
+        let zones = [("UTC0", 0, 0), ("IST-5:30", 330, 330), ("EST5EDT,M3.2.0,M11.1.0", -300, -240), ("ACST-9:30ACDT,M10.1.0,M4.1.0/3", 630, 570)];
+        if let Ok(tz) = std::env::var("RUNESWEEPER_TZ_CHILD") {
+            let &(_, w, s) = zones.iter().find(|z| z.0 == tz).expect("a zone of the table");
+            assert_eq!((utc_offset_minutes(winter), utc_offset_minutes(summer)), (w, s), "{tz}");
+            return;
+        }
+        for (tz, ..) in zones {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "storage::tests::native_dates_are_local_time_for_each_moment", "--test-threads=1"])
+                .env("TZ", tz)
+                .env("RUNESWEEPER_TZ_CHILD", tz)
+                .output()
+                .unwrap();
+            let said = String::from_utf8_lossy(&out.stdout);
+            assert!(out.status.success() && said.contains("1 passed"), "{tz}: {said}");
+        }
+    }
 
     #[test]
     fn settings_round_trip() {

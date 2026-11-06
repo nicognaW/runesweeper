@@ -10,23 +10,29 @@
 use rune::Waker;
 
 use crate::game::{Game, Mode};
-use crate::generate::{self, Dims};
+use crate::generate::{self, LevelSize};
 
 /// What lays a field: [`generate::lay`], or a stand-in for tests.
-pub type Lay = fn(Mode, Dims, u64, usize) -> Game;
+pub type Lay = fn(Mode, LevelSize, u64, usize) -> Game;
 
 /// The field (mode, level, seed, first click) name, on its way.
 pub struct Generating {
     /// The first click it was asked for, opened once the field lands.
     pub first: usize,
+    /// When it started, on the poll clock (stamped by the first poll after the click, as the
+    /// click's own clock may be stale).
+    pub since: Option<f64>,
+    /// When the band of light over the hidden tiles started, 600 ms into a generation that is
+    /// still running (on the poll clock).
+    pub sweep_from: Option<f64>,
     job: imp::Job,
 }
 
 impl Generating {
     /// Starts laying the field `lay` gives for these inputs; `wake` runs once it is ready.
     /// The web's worker runs [`generate::lay`] whatever `lay` is.
-    pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Generating {
-        Generating { first, job: imp::Job::start(lay, mode, dims, seed, first, wake) }
+    pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Generating {
+        Generating { first, since: None, sweep_from: None, job: imp::Job::start(lay, mode, dims, seed, first, wake) }
     }
 
     /// The field, once, when it is ready.
@@ -71,7 +77,7 @@ mod imp {
     }
 
     impl Job {
-        pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Job {
+        pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Job {
             let (send, field) = channel();
             let stop = Arc::new(AtomicBool::new(false));
             let stopped = stop.clone();
@@ -151,14 +157,14 @@ mod imp {
     }
 
     pub struct Job {
-        args: (Lay, Mode, Dims, u64, usize),
+        args: (Lay, Mode, LevelSize, u64, usize),
         worker: Option<Worker>,
         reply: Rc<RefCell<Reply>>,
         _listeners: Option<(Closure<dyn FnMut(MessageEvent)>, Closure<dyn FnMut(JsValue)>)>,
     }
 
     impl Job {
-        pub fn start(lay: Lay, mode: Mode, dims: Dims, seed: u64, first: usize, wake: Option<Waker>) -> Job {
+        pub fn start(lay: Lay, mode: Mode, dims: LevelSize, seed: u64, first: usize, wake: Option<Waker>) -> Job {
             let worker = SPARE.with(|s| s.borrow_mut().take()).or_else(spawn);
             let reply = Rc::new(RefCell::new(if worker.is_some() { Reply::Waiting } else { Reply::Failed }));
             let mut listeners = None;

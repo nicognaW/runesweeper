@@ -7,7 +7,7 @@ use rune::{El, Phase, col, el, row, spacer, text};
 
 use crate::app::App;
 use crate::callout::{self, line, ring};
-use crate::game::Game;
+use crate::generating::Generating;
 use crate::hint::words;
 use crate::record::Layout;
 use crate::review::{Kind, Marker, Review};
@@ -16,11 +16,23 @@ use crate::style::*;
 use crate::toolbar::well;
 
 impl App {
-    /// Reviews History's record `i`, its field laid again from the record.
+    /// Reviews History's record `i` on the mines it keeps. One that kept only its seed and
+    /// first click has its field laid again off the UI thread, and the review opens when it
+    /// lands ([`App::tick`]); the window never waits for it.
     pub fn open_review(&mut self, i: usize) {
         let Some(r) = self.history.get(i) else { return };
-        self.review = Some(Review::of(r));
         self.panel = None;
+        match (r.base(), &r.layout) {
+            (Some(base), _) => {
+                self.review_laying = None;
+                self.review = Some(Review::of(r, base));
+            }
+            (None, &Layout::Seeded { seed, first, .. }) => {
+                self.review = None;
+                self.review_laying = Some((i, Generating::start(self.lay, r.mode, r.dims, seed, first, self.waker.clone())));
+            }
+            (None, Layout::Mines(_)) => {}
+        }
     }
 
     /// Reviews the game just played: its record is History's last, its field the one in
@@ -28,8 +40,8 @@ impl App {
     pub fn review_last(&mut self) {
         let Some(r) = self.history.last().filter(|_| self.game.over()) else { return };
         let base = match r.layout {
-            Layout::Seeded { .. } => Game::with_mines(self.game.w, self.game.h, &(0..self.game.cells.len()).filter(|&i| self.game.cells[i].mine).collect::<Vec<_>>()),
-            Layout::Mines(_) => r.base(),
+            Layout::Seeded { .. } => self.game.as_laid(),
+            Layout::Mines(_) => r.base().expect("Classic keeps its mines"),
         };
         self.review = Some(Review::on(r, base, self.fifty_fifties.clone()));
         self.panel = None;
@@ -37,6 +49,7 @@ impl App {
 
     pub fn leave_review(&mut self) {
         self.review = None;
+        self.review_laying = None;
     }
 
     /// `d` moves forward (or back) in the review.
@@ -111,21 +124,13 @@ fn moment(r: &Review) -> f64 {
     r.at.checked_sub(1).map_or(0.0, |k| r.record.moves[k].ms as f64 / 1000.0)
 }
 
-fn kind_name(k: &Kind) -> S {
+/// A marker's name and colour.
+fn badge(k: &Kind, p: &Palette) -> (S, rune::Color) {
     match k {
-        Kind::Needless => S::MarkNeedless,
-        Kind::Missed { .. } => S::MarkMissed,
-        Kind::Forced { .. } => S::MarkForced,
-        Kind::Chord { .. } => S::MarkChord,
-    }
-}
-
-fn kind_color(k: &Kind, p: &Palette) -> rune::Color {
-    match k {
-        Kind::Needless => p.flag,
-        Kind::Missed { .. } => p.accent,
-        Kind::Forced { .. } => p.win,
-        Kind::Chord { .. } => p.numbers[2],
+        Kind::Needless => (S::MarkNeedless, p.flag),
+        Kind::Missed { .. } => (S::MarkMissed, p.accent),
+        Kind::Forced { .. } => (S::MarkForced, p.win),
+        Kind::Chord { .. } => (S::MarkChord, p.numbers[2]),
     }
 }
 
@@ -169,7 +174,7 @@ fn track(s: &App, r: &Review, w: f32, p: &Palette) -> El {
         .child(el().absolute(7.0, 12.0).size(x_of(r.at, n, w) - 7.0, 2.0).radius(1.0).fill(p.accent.alpha(0.7)).inert());
     for (k, m) in r.markers.iter().enumerate() {
         let on = r.marker == Some(k);
-        let color = kind_color(&m.kind, p);
+        let (name, color) = badge(&m.kind, p);
         let dot = el()
             .key(format!("review-marker-{k}"))
             .absolute(x_of(m.at, n, w) - 7.0, 6.0)
@@ -178,7 +183,7 @@ fn track(s: &App, r: &Review, w: f32, p: &Palette) -> El {
             .fill(color)
             .border(if on { 2.0 } else { 1.0 }, if on { p.text } else { ca(0x000000, 0.5) })
             .role("button")
-            .label(s.tr(kind_name(&m.kind)))
+            .label(s.tr(name))
             .checked(on)
             .focusable(true)
             .press_scale(0.9)
@@ -255,7 +260,10 @@ pub fn view(s: &App, p: &Palette, width: f32) -> Option<El> {
         .w_full()
         .gap(8.0)
         .center_y()
-        .child(text(s.tr(kind_name(&m.kind))).font(UI_BOLD).color(kind_color(&m.kind, p)))
+        .child({
+            let (name, color) = badge(&m.kind, p);
+            text(s.tr(name)).font(UI_BOLD).color(color)
+        })
         .child(spacer())
         .child(callout::close("review-callout-close", s.tr(S::HintClose), |s: &mut App| s.review_unselect(), p));
     let mut body = col().w_full().gap(6.0).child(head);

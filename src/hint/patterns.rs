@@ -177,10 +177,16 @@ fn one_side(v: &View, a: usize, d: Xy, cells: &[usize]) -> Option<isize> {
     (s.abs() == 1 && cells.iter().all(|&c| offset(v, a, d, c).0 == s)).then_some(s)
 }
 
-/// Whether `cells` lie on both sides of the line.
-fn straddles(v: &View, a: usize, d: Xy, cells: &[usize]) -> bool {
-    let sides: Vec<isize> = cells.iter().map(|&c| offset(v, a, d, c).0).collect();
-    sides.iter().any(|&s| s > 0) && sides.iter().any(|&s| s < 0)
+/// Whether `cells` are exactly the cells at `want`, offsets (to one side, along) from `a`
+/// against the line along `d`.
+fn exactly(v: &View, a: usize, d: Xy, cells: &[usize], want: &[(isize, isize)]) -> bool {
+    cells.len() == want.len() && cells.iter().all(|&c| want.contains(&offset(v, a, d, c)))
+}
+
+/// Whether `cells`, around two neighbouring numbers `a` and `b = a + d`, come to a point as
+/// in minesweeper.online's triangles: both cells beside `b` and one beside `a`.
+fn triangle(v: &View, a: usize, d: Xy, cells: &[usize]) -> bool {
+    [-1, 1].into_iter().any(|side| exactly(v, a, d, cells, &[(1, 1), (-1, 1), (side, 0)]))
 }
 
 fn minus(a: &[usize], b: &[usize]) -> Vec<usize> {
@@ -255,24 +261,26 @@ pub(super) fn pair(v: &View, cs: &[Constraint], known: &[usize], a: &Constraint,
                     } else {
                         Pattern::OneOnePlus
                     }
-                } else if straddles(v, a.at, d, &a.cells) {
-                    let along: Vec<isize> = a.cells.iter().map(|&c| offset(v, a.at, d, c).1).collect();
-                    if along.iter().all(|&s| s == 1) {
-                        Pattern::Hole1
-                    } else if along.iter().all(|&s| s == 0) {
-                        Pattern::Hole2
-                    } else {
-                        Pattern::Triangle1
-                    }
+                } else if exactly(v, a.at, d, &a.cells, &[(1, 1), (-1, 1)]) {
+                    // The smaller number's two cells, either side of the larger (H1).
+                    Pattern::Hole1
+                } else if exactly(v, a.at, d, &a.cells, &[(1, 0), (-1, 0)]) {
+                    // Either side of the smaller number itself (H2).
+                    Pattern::Hole2
+                } else if triangle(v, a.at, d, &a.cells) {
+                    Pattern::Triangle1
+                } else if only_b.len() == 1 {
+                    Pattern::OneOne
                 } else {
                     Pattern::OneOnePlus
                 }
             }
-            // Two apart: across hidden cells between them, or the same hole as H2 read from
-            // one row further out.
-            Some((d, 2)) if cell(v, plus(xy(v, a.at), d, 1)).is_some_and(|m| a.cells.contains(&m)) => Pattern::Hole3,
-            Some((d, 2)) if cell(v, plus(xy(v, a.at), d, 1)).is_some_and(|m| v.open[m].is_some()) && straddles(v, a.at, d, &a.cells) => Pattern::Hole2,
-            _ => Pattern::OneOne,
+            // Two apart: the cell between them and one beside it (H3), or the same hole as H2
+            // read from one row further out, either side of the open cell between them.
+            Some((d, 2)) if [-1, 1].into_iter().any(|side| exactly(v, a.at, d, &a.cells, &[(0, 1), (side, 1)])) => Pattern::Hole3,
+            Some((d, 2)) if cell(v, plus(xy(v, a.at), d, 1)).is_some_and(|m| v.open[m].is_some()) && exactly(v, a.at, d, &a.cells, &[(1, 1), (-1, 1)]) => Pattern::Hole2,
+            _ if only_b.len() == 1 => Pattern::OneOne,
+            _ => Pattern::OneOnePlus,
         };
     }
     if let Some((p, numbers)) = row(v, cs, known, a, b) {
@@ -288,19 +296,21 @@ pub(super) fn pair(v: &View, cs: &[Constraint], known: &[usize], a: &Constraint,
     if small.cells.iter().all(|c| big.cells.contains(c)) {
         return if minus(&big.cells, &small.cells).len() == 1 { Pattern::OneTwo } else { Pattern::OneTwoPlus };
     }
-    if let Some((d, 1)) = line(v, small.at, big.at) {
-        let all = [small.cells.as_slice(), &big.cells].concat();
-        if one_side(v, small.at, d, &all).is_none() && straddles(v, small.at, d, &shared) {
-            let own_big = minus(&big.cells, &small.cells).len();
+    // The triangles, as drawn: the shared cells come to a point, both beside the smaller
+    // number and one beside the larger (T2–T4), or lie either side of the larger (T5).
+    if let Some((d, 1)) = line(v, big.at, small.at) {
+        let own_big = minus(&big.cells, &small.cells).len();
+        if triangle(v, big.at, d, &shared) {
             return if own_big >= 2 {
                 Pattern::Triangle4
-            } else if shared.len() == 2 {
-                Pattern::Triangle5
             } else if small.need >= 2 {
                 Pattern::Triangle3
             } else {
                 Pattern::Triangle2
             };
+        }
+        if own_big == 1 && exactly(v, big.at, d, &shared, &[(1, 0), (-1, 0)]) {
+            return Pattern::Triangle5;
         }
     }
     // Named for the pair, whichever way it is read: the larger number's own cells are all mines.

@@ -45,7 +45,7 @@ that couldn't were cut.
   field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
 - The result banner straddles the field's edge, says how it went, and leaves after 3 s; its
   Review action stays behind as a small tab on the console's bottom rim.
-- **A Review** (from that action, or any game in History) replays the game on the field, with a
+- **A Review** (from that action, or any game in History) walks the game on the field, with a
   timeline under it marking needless guesses, missed deductions (a pause over 5 s while a cell
   could be proven), forced guesses (true 50/50 or not) and clicks a chord would have saved, plus
   3BV, 3BV/s and efficiency. Selecting a marker sets the field to that moment and gives the
@@ -219,12 +219,32 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
 
 ## Layout
 
-- `src/game.rs`: the rules, with tests.
-- `src/solver/`: proofs, exact odds, the bot and its benchmark (`examples/solver.rs`).
-- `src/app.rs`: state, input (press, chord, flag), the clock, keys.
+- `src/game.rs`: the rules, Mode and Level, with tests.
+- `src/generate.rs`, `src/generate/max_guess.rs`: laying a field from mode, level, seed and first
+  click; No Guess redraws, Max Guess searches.
+- `src/generating.rs`, `web/worker.js`: generation off the UI thread (a thread natively, a worker
+  on the web).
+- `src/solver/`: proofs, exact odds, true 50/50s, dead cells, the bot and its benchmark
+  (`examples/solver.rs`).
+- `src/hint/`: the Hint as data, from the open numbers only: one or two numbers, any deduction
+  (`logic.rs`), the named patterns (`patterns.rs`), guesses (`guess.rs`) and the words
+  (`words.rs`); zh-CN pattern names in `src/zh_cn_terms.md`.
+- `src/record.rs`: a game record and its one-line format; 3BV and the fastest win.
+- `src/review.rs`: Review as data: markers, their reasons and the speed figures, from a record.
+- `src/storage.rs`: settings, History and the game in play, on disk or in browser storage; the
+  local time offset for History's dates.
+- `src/strings.rs`, `src/locale.rs`: every string in English and zh-CN, and the system's language.
+- `src/app.rs`: state, the clock, keys and input on the board (press, chord, flag).
+- `src/callout.rs`: the Hint on screen (its input, `press_hint` and `apply_hint`, is here) and the
+  callout and rings Review reuses.
+- `src/timeline.rs`: Review on screen (its input, `open_review`, `review_step` and the rest, is
+  here): the timeline, markers and reason.
+- `src/history.rs`: the History panel.
 - `src/board.rs`, `src/ui.rs`, `src/icons.rs`, `src/style.rs`: the view, vector art and palettes.
 - `src/toolbar.rs`: the toolbar and the panels it opens.
 - `src/gfx.rs`: the compositor that turns effect slots into `rune-fx` shaders.
+- `src/lib.rs`: the app spec and the snapshot scenes; `src/main.rs` starts it.
+- `src/*_tests.rs`, `src/test_fields.rs`: headless App tests, and fields drawn as rows for tests.
 - `vendor/rune-fx`: Rune's effects crate with a one-line fix so it builds for wasm.
 - `src/fonts.rs`, `build.rs`, `assets/fonts/`: the fonts. The build cuts MiSans VF down to the
   characters in `src/strings.rs` (about 27 KB) and compiles it in; a new string needs no font step.

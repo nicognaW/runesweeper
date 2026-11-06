@@ -12,10 +12,8 @@ use crate::toolbar_tests::{click, press, runtime, settle, shown, text_in, words}
 
 /// A Classic App on the field drawn as rows, `*` for a mine.
 fn on(rows: &[&str]) -> App {
-    let w = rows[0].len();
-    let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
     let mut a = App::with(Saved::default(), 3);
-    a.game = Game::with_mines(w, rows.len(), &mines);
+    a.game = crate::test_fields::mined(rows);
     a
 }
 
@@ -144,7 +142,7 @@ fn the_move_list_rebuilds_the_same_final_field() {
         let r = last(&a).clone();
         assert!(r.moves.iter().any(|m| m.act == Act::Chord) && r.moves.iter().any(|m| matches!(m.act, Act::Mark { .. })));
         let back = Record::parse(&r.write()).expect("the record reads back");
-        let field = back.replay();
+        let field = back.rebuild().expect("its mines are kept");
         let covers = |g: &Game| g.cells.iter().map(|c| (c.mine, c.cover)).collect::<Vec<_>>();
         assert_eq!(covers(&field), covers(&end), "{mode:?}");
         assert_eq!(field.status, end.status, "{mode:?}");
@@ -203,14 +201,16 @@ fn the_timer_turns_gold_when_a_win_beats_the_fastest_win() {
     };
     let rows = ["...*", "...."];
     let mut a = win(&rows, Vec::new(), 30);
-    assert!(a.new_best, "the first win is the fastest yet");
+    assert!(!a.new_best, "the first win has no fastest win to beat");
     for (seconds, gold) in [(31, false), (30, false), (12, true), (20, false)] {
         a = win(&rows, a.history, seconds);
         assert_eq!(a.new_best, gold, "{seconds} s");
     }
-    // Another level has its own fastest win.
-    let mut a = win(&["....*", "....."], a.history, 40);
-    assert!(a.new_best, "another level");
+    // Another level has its own fastest win, so its first is plain and its next beats it.
+    let a = win(&["....*", "....."], a.history, 40);
+    assert!(!a.new_best, "another level's first win");
+    let mut a = win(&["....*", "....."], a.history, 39);
+    assert!(a.new_best, "another level's own fastest beaten");
     a.new_game_now();
     assert!(!a.new_best, "a new field starts plain");
 }
@@ -262,6 +262,31 @@ fn the_history_button_opens_records_for_the_current_mode_and_level_newest_first(
     click(&mut rt, "history-button");
     settle(&mut rt);
     assert!(!shown(&rt, "history"), "and closes it");
+}
+
+#[test]
+fn every_record_is_reachable_in_history_however_many_there_are() {
+    let n = 1500;
+    let mut rt = runtime(Saved::default());
+    rt.update(|s, _| s.history = (0..n).map(|k| game(k as u64, Mode::Classic, (9, 9, 10), End::Lost, 5)).collect());
+    click(&mut rt, "history-button");
+    settle(&mut rt);
+    let first = rows(&rt);
+    assert_eq!(first.first(), Some(&(n - 1)), "newest first");
+    assert!(first.len() < 60, "only the rows near the view are drawn, not {}", first.len());
+    // Scrolled to the end, the oldest game is there.
+    let (x, y) = rt.find("history-list").expect("the list");
+    for _ in 0..200 {
+        rt.wheel(x, y, -2000.0);
+        rt.frame(1.0 / 60.0);
+    }
+    settle(&mut rt);
+    let last = rows(&rt);
+    assert_eq!(last.last(), Some(&0), "the oldest game, past {n} others");
+    assert!(last.len() < 60, "{} rows drawn", last.len());
+    click(&mut rt, "history-row-0");
+    settle(&mut rt);
+    assert!(rt.state.review.is_some(), "and it opens in Review");
 }
 
 #[test]

@@ -261,10 +261,15 @@ impl Hint {
     }
 }
 
-/// The hint for `game` as the player sees it, the last move at `last`.
+/// The player's flags on `game`, as [`find`] and [`advise`] take them.
+fn flags(game: &Game) -> Vec<bool> {
+    game.cells.iter().map(|c| c.cover == Cover::Flag).collect()
+}
+
+/// The hint for `game` as the player sees it, the last move at `last` (tests).
+#[cfg(test)]
 pub fn of(game: &Game, last: Option<usize>) -> Hint {
-    let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
-    find(&View::of(game), &flags, last)
+    find(&View::of(game), &flags(game), last)
 }
 
 /// What a hint knows of the field beyond what the player sees.
@@ -279,8 +284,7 @@ pub struct Field<'a> {
 /// The hint for `game` as the player sees it, the last move at `last`, with the guess tier
 /// when no cell can be proven.
 pub fn advise_game(game: &Game, last: Option<usize>, field: &Field) -> Hint {
-    let flags: Vec<bool> = game.cells.iter().map(|c| c.cover == Cover::Flag).collect();
-    advise(&View::of(game), &flags, last, field)
+    advise(&View::of(game), &flags(game), last, field)
 }
 
 /// [`find`], or when it finds nothing and no cell can be proven, how to choose a guess.
@@ -293,8 +297,16 @@ pub fn advise(v: &View, flags: &[bool], last: Option<usize>, field: &Field) -> H
 }
 
 /// The hint for the open numbers in `v`, with the player's flags at `flags` and their last
-/// move at `last`. A wrong flag comes first; then the fewest numbers, a named pattern, a safe
-/// cell before a mine, and the nearest the last move.
+/// move at `last`.
+///
+/// A provably wrong flag comes first (#10: "the first hint says so before anything else").
+/// Then one sort key:
+/// - the fewest numbers, and at the same count a named pattern before raw logic. #16 has a
+///   named pattern beat raw logic "on the same numbers", then the fewest numbers; #10's
+///   "prefer a named pattern, then the fewest numbers" reads the same way here, as a pattern
+///   on more numbers is no cheaper to see than logic on fewer.
+/// - a safe cell before a mine: #10, "at equal cost, a safe cell is preferred to a mine".
+/// - the nearest the last move (#10, #16).
 pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
     let cs = constraints(v, &vec![Fact::Unknown; v.len()]);
     let mut found = Vec::new();

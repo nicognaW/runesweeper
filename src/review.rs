@@ -6,7 +6,8 @@
 //! - A needless guess: the move opened a cell nothing proved while some cell could be proven
 //!   safe. It shows that proof.
 //! - A missed deduction: more than [`PAUSE_MS`] passed before the move while some hidden cell
-//!   could be proven safe. It shows that proof.
+//!   could be proven: safe, or a mine not yet flagged. It shows that proof, a safe cell's
+//!   when there is one.
 //! - A forced guess: the move opened a cell when none could be proven safe (as History
 //!   counts them, the first click excluded), and whether it was a true 50/50. It shows how a
 //!   strong player would have chosen.
@@ -29,7 +30,7 @@ pub const PAUSE_MS: u32 = 5000;
 pub enum Kind {
     /// An unproven cell opened while a safe cell could be proven.
     Needless,
-    /// A pause of `pause_ms` while a safe cell could be proven.
+    /// A pause of `pause_ms` while a safe cell, or a mine not yet flagged, could be proven.
     Missed { pause_ms: u32 },
     /// A cell opened when none could be proven safe; `fifty` if it was half of a true 50/50.
     Forced { fifty: bool },
@@ -90,9 +91,9 @@ pub struct Review {
 }
 
 impl Review {
-    /// A review of `record`, its field laid again from the record.
-    pub fn of(record: &Record) -> Review {
-        let base = record.base();
+    /// A review of `record` on `base`, its field as laid ([`Record::base`], or laid again
+    /// off the UI thread); a Max Guess field's true 50/50s are found again from it.
+    pub fn of(record: &Record, base: Game) -> Review {
         let announced = match record.layout {
             Layout::Seeded { first, .. } if record.mode == Mode::MaxGuess => play::walk(&base, first).fifty_fifties,
             _ => Vec::new(),
@@ -104,7 +105,7 @@ impl Review {
     /// field was built with (the game just played has both, so nothing is laid again).
     pub fn on(record: &Record, base: Game, announced: Vec<(usize, usize)>) -> Review {
         let markers = markers(record, &base);
-        let end = replay(&base, record, record.moves.len());
+        let end = rebuild(&base, record, record.moves.len());
         let (three_bv, solved) = record::three_bv(&end);
         let ms = record.moves.last().map_or(0, |m| m.ms);
         let seconds = if ms > 0 { ms as f64 / 1000.0 } else { record.seconds as f64 };
@@ -150,11 +151,12 @@ impl Review {
     }
 
     /// What a hint would have said at marker `k`: for a needless guess or a missed
-    /// deduction, the proof of a safe cell; for a forced guess, how a strong player chooses;
-    /// for a chord saving, why the chord was safe.
+    /// deduction, the proof of a safe cell (of a mine to flag when no cell could be proven
+    /// safe); for a forced guess, how a strong player chooses; for a chord saving, why the
+    /// chord was safe.
     pub fn hint(&self, k: usize) -> Hint {
         let m = &self.markers[k];
-        let g = replay(&self.base, &self.record, m.at);
+        let g = rebuild(&self.base, &self.record, m.at);
         if let Kind::Chord { number, ref cells, .. } = m.kind {
             return chord_hint(&g, number, cells);
         }
@@ -165,18 +167,20 @@ impl Review {
             let classic_first = (self.record.mode == Mode::Classic).then(|| moves.iter().find(|m| m.act == Act::Open).map(|m| m.cell)).flatten();
             return hint::advise(&p.view, &p.flags(), last, &hint::Field { classic_first, announced: &self.announced });
         }
-        hint::find(&p.view, &p.flags(), last)
+        let flags = if p.any_safe() { p.flags() } else { p.flagged_mines(&g) };
+        hint::find(&p.view, &flags, last)
     }
 
     fn show(&mut self, at: usize) {
         if at != self.at {
-            self.game = replay(&self.base, &self.record, at);
+            self.game = rebuild(&self.base, &self.record, at);
             self.at = at;
         }
     }
 }
 
-fn replay(base: &Game, record: &Record, at: usize) -> Game {
+/// The field after the record's first `at` moves on `base`.
+fn rebuild(base: &Game, record: &Record, at: usize) -> Game {
     let mut g = base.clone();
     for m in &record.moves[..at] {
         m.apply(&mut g);
@@ -213,6 +217,17 @@ impl Position {
 
     fn any_safe(&self) -> bool {
         self.facts.contains(&Fact::Safe)
+    }
+
+    /// Whether some proven mine is still unflagged on `g`.
+    fn any_unflagged_mine(&self, g: &Game) -> bool {
+        self.facts.iter().zip(&g.cells).any(|(&f, c)| f == Fact::Mine && c.cover != Cover::Flag)
+    }
+
+    /// The proven mines the player has flagged on `g`, as flags: a hint then names a mine
+    /// still to flag, never a player's wrong flag.
+    fn flagged_mines(&self, g: &Game) -> Vec<bool> {
+        self.facts.iter().zip(&g.cells).map(|(&f, c)| f == Fact::Mine && c.cover == Cover::Flag).collect()
     }
 
     /// The proven mines, as flags: a hint then names a safe cell, never a mine to flag or a
@@ -293,7 +308,7 @@ fn markers(record: &Record, base: &Game) -> Vec<Marker> {
             let needless = unproven && p.any_safe();
             if needless {
                 out.push(Marker { at: k, kind: Kind::Needless });
-            } else if pause > PAUSE_MS && p.any_safe() {
+            } else if pause > PAUSE_MS && (p.any_safe() || p.any_unflagged_mine(&g)) {
                 out.push(Marker { at: k, kind: Kind::Missed { pause_ms: pause } });
             }
             if unproven && !p.any_safe() {

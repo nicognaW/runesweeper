@@ -9,7 +9,7 @@ use rune::{Key, Runtime};
 
 use crate::app::App;
 use crate::game::{Cover, Game, Level, Mode};
-use crate::generate::{self, Dims};
+use crate::generate::{self, LevelSize};
 use crate::generating;
 use crate::record::{Act, Layout};
 use crate::storage::Saved;
@@ -40,15 +40,25 @@ impl Gate {
 // One gate per test: tests run at the same time.
 static SLOW: Gate = Gate::new();
 static CANCELLED: Gate = Gate::new();
+static REVIEWED: Gate = Gate::new();
 
-fn slow_lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+fn slow_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     SLOW.wait();
     generate::lay(mode, dims, seed, first)
 }
 
-fn cancelled_lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
+fn cancelled_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
     CANCELLED.wait();
     generate::lay(mode, dims, seed, first)
+}
+
+fn reviewed_lay(mode: Mode, dims: LevelSize, seed: u64, first: usize) -> Game {
+    REVIEWED.wait();
+    generate::lay(mode, dims, seed, first)
+}
+
+fn never_lay(_: Mode, _: LevelSize, _: u64, _: usize) -> Game {
+    panic!("a record that keeps its mines is never laid again")
 }
 
 fn no_guess(level: Level) -> Saved {
@@ -56,7 +66,7 @@ fn no_guess(level: Level) -> Saved {
 }
 
 /// A runtime whose poll runs every frame, as the window's does.
-fn polled(saved: Saved, lay: fn(Mode, Dims, u64, usize) -> Game) -> Runtime<App> {
+fn polled(saved: Saved, lay: fn(Mode, LevelSize, u64, usize) -> Game) -> Runtime<App> {
     let mut rt = runtime(saved);
     rt.poll = Some(|s, t, tx| s.tick(t, tx));
     rt.update(|s, _| s.lay = lay);
@@ -76,7 +86,7 @@ fn tap(rt: &mut Runtime<App>, i: usize) {
 }
 
 fn mines(g: &Game) -> Vec<usize> {
-    (0..g.cells.len()).filter(|&i| g.cells[i].mine).collect()
+    g.mine_cells()
 }
 
 fn thinking(rt: &Runtime<App>) -> bool {
@@ -140,7 +150,8 @@ fn the_window_keeps_drawing_while_a_slow_field_is_generated() {
     let landed = rt.state.now;
     assert_eq!((rt.state.started_at, rt.state.seconds), (Some(landed), 1));
     // Its record names the field by seed and first click, and starts with that click.
-    assert_eq!(rt.state.record.layout, Layout::Seeded { seed, first });
+    let laid = Some(mines(&rt.state.game));
+    assert_eq!(rt.state.record.layout, Layout::Seeded { seed, first, laid });
     assert_eq!((rt.state.record.moves[0].act, rt.state.record.moves[0].cell), (Act::Open, first));
 }
 
@@ -197,4 +208,64 @@ fn a_field_sent_as_a_mine_mask_is_the_field_laid() {
             assert_eq!(back.cells, g.cells);
         }
     }
+}
+
+/// A No Guess game played to a loss on Beginner, as History keeps it.
+fn lost_no_guess(rt: &mut Runtime<App>) -> crate::record::Record {
+    tap(rt, 40);
+    frame_until_laid(rt);
+    let mine = (0..rt.state.game.cells.len()).find(|&i| rt.state.game.cells[i].mine).unwrap();
+    rt.update(|s, _| s.open_at(mine));
+    rt.frame(1.0 / 60.0);
+    rt.state.history.last().expect("a record").clone()
+}
+
+#[test]
+fn a_record_that_keeps_its_mines_opens_in_review_without_laying_anything() {
+    let mut rt = polled(no_guess(Level::Beginner), generate::lay);
+    let r = lost_no_guess(&mut rt);
+    assert!(matches!(r.layout, Layout::Seeded { laid: Some(_), .. }), "{:?}", r.layout);
+    rt.update(|s, _| s.lay = never_lay);
+    rt.update(|s, _| s.open_review(s.history.len() - 1));
+    let rv = rt.state.review.as_ref().expect("open at once");
+    assert_eq!(rv.record, r);
+    assert_eq!(rv.game.cells, rt.state.game.cells, "the field as it ended");
+}
+
+#[test]
+fn an_older_record_is_laid_off_the_ui_thread_before_its_review_opens() {
+    let mut rt = polled(no_guess(Level::Beginner), generate::lay);
+    let mut r = lost_no_guess(&mut rt);
+    let ended = rt.state.game.cells.clone();
+    // Written before records kept their mines: only the seed and first click.
+    let Layout::Seeded { seed, first, .. } = r.layout else { panic!("{:?}", r.layout) };
+    r.layout = Layout::Seeded { seed, first, laid: None };
+    let history = vec![r.clone()];
+    rt.update(|s, _| {
+        s.history = history;
+        s.lay = reviewed_lay;
+    });
+    rt.frame(1.0 / 60.0);
+    let t = Instant::now();
+    rt.update(|s, _| s.open_review(0));
+    rt.frame(1.0 / 60.0);
+    assert!(t.elapsed() < Duration::from_millis(500), "opening waited for the field");
+    assert!(rt.state.review.is_none(), "the review waits for its field");
+    assert!(thinking(&rt), "the face thinks meanwhile");
+    for _ in 0..30 {
+        let t = Instant::now();
+        rt.frame(1.0 / 60.0);
+        assert!(t.elapsed() < Duration::from_millis(500), "a frame waited for the field");
+    }
+    REVIEWED.open();
+    let start = Instant::now();
+    while rt.state.review.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(20), "the review never opened");
+        rt.frame(1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(!thinking(&rt), "the face stops thinking once it lands");
+    let rv = rt.state.review.as_ref().unwrap();
+    assert_eq!(rv.game.cells, ended, "the field as it ended");
+    assert_eq!(rt.state.history, [r], "reviewing never changes the record");
 }

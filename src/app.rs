@@ -71,12 +71,9 @@ pub struct App {
     /// Max Guess: the true 50/50s the laid field forces on a perfect player, each as its pair
     /// of cells (empty in the other modes, and before the field is laid).
     pub fifty_fifties: Vec<(usize, usize)>,
-    /// When that generation started, on the poll clock (stamped by the first poll after the
-    /// click, as the click's own clock may be stale).
-    pub generating_since: Option<f64>,
-    /// When the band of light over the hidden tiles started, 600 ms into a generation that is
-    /// still running (on the poll clock).
-    pub sweep_from: Option<f64>,
+    /// History's record `.0`, whose review waits for its field, laid again off the UI thread:
+    /// the record keeps only its seed and first click. The face thinks meanwhile.
+    pub review_laying: Option<(usize, Generating)>,
     /// What lays the new modes' fields: [`generate::lay`] (tests slow it down).
     pub lay: Lay,
     /// Wakes the window when a field lands (from `AppSpec::setup`; none headless).
@@ -123,8 +120,6 @@ pub struct App {
     record_t0: Option<f64>,
     /// The Mode and Level History shows; the current ones each time it opens.
     pub history_filter: (Mode, Level),
-    /// Minutes from UTC to the player's clock, for History's dates.
-    pub utc_offset: i64,
     /// The Hint on screen and how far into it the player has stepped. Any move clears it.
     pub hint: Option<Shown>,
     /// A game being reviewed: its field is drawn instead of the game in play, which waits,
@@ -177,9 +172,8 @@ impl App {
             unlaid: false,
             clock_waits: false,
             generating: None,
+            review_laying: None,
             fifty_fifties: Vec::new(),
-            generating_since: None,
-            sweep_from: None,
             lay: generate::lay,
             waker: None,
             saved,
@@ -207,7 +201,6 @@ impl App {
             record: Record::new(Mode::Classic, (0, 0, 0)),
             record_t0: None,
             history_filter: (Mode::Classic, level),
-            utc_offset: storage::utc_offset_minutes(),
             hint: None,
             review: None,
             banner_done: false,
@@ -262,8 +255,6 @@ impl App {
         // A field still generating is cancelled: it never lands.
         self.generating = None;
         self.fifty_fifties.clear();
-        self.generating_since = None;
-        self.sweep_from = None;
         self.unlaid = self.mode.lays_on_first_click();
         if self.unlaid {
             self.seed = self.seeds.next_u64();
@@ -280,16 +271,12 @@ impl App {
     /// click name, off the UI thread.
     fn lay_at(&mut self, first: usize) {
         self.generating = Some(Generating::start(self.lay, self.mode, self.dims(), self.seed, first, self.waker.clone()));
-        self.generating_since = None;
-        self.sweep_from = None;
     }
 
     /// The generated field lands: any marks already placed are kept, and the first click
     /// opens it. The clock starts at the next poll.
     fn land(&mut self, mut g: Game, first: usize) {
         self.generating = None;
-        self.generating_since = None;
-        self.sweep_from = None;
         for (c, old) in g.cells.iter_mut().zip(&self.game.cells) {
             c.cover = old.cover;
         }
@@ -300,7 +287,8 @@ impl App {
             self.fifty_fifties = play::walk(&g, first).fifty_fifties;
         }
         self.game = g;
-        self.record.layout = Layout::Seeded { seed: self.seed, first };
+        // The mines as laid, so a review of it never lays the field again.
+        self.record.layout = Layout::Seeded { seed: self.seed, first, laid: Some(self.game.mine_cells()) };
         // The record's clock, like the timer, starts with the field: generating never counts.
         self.record_t0 = Some(self.now);
         self.unlaid = false;
@@ -339,6 +327,7 @@ impl App {
         self.abandon();
         self.hint = None;
         self.review = None;
+        self.review_laying = None;
         self.lay_new_field();
         self.field += 1;
         self.started_at = None;
@@ -373,7 +362,7 @@ impl App {
     }
 
     pub fn mood(&self) -> Mood {
-        if self.generating.is_some() && self.review.is_none() {
+        if (self.generating.is_some() && self.review.is_none()) || self.review_laying.is_some() {
             return Mood::Think;
         }
         match self.shown().status {
@@ -418,8 +407,7 @@ impl App {
 
     /// A right click on cell `i`.
     pub fn mark_at(&mut self, i: usize) {
-        // A field being generated takes no input, nor one waiting out a review.
-        if self.game.over() || self.generating.is_some() || self.review.is_some() {
+        if self.game.over() || self.waits() {
             return;
         }
         self.note(Act::Mark { marks: self.saved.marks }, i);
@@ -458,14 +446,14 @@ impl App {
     }
 
     /// The game ended: its record joins History. A field nobody clicked has none. A win that
-    /// beats the fastest for its mode and level, or is the first, turns the timer gold.
+    /// beats the fastest win for its mode and level turns the timer gold; the first has none to beat.
     fn finish(&mut self, end: End) {
         if !self.game.started {
             return;
         }
         let r = self.record_now(end);
         if end == End::Won {
-            self.new_best = record::fastest(&self.history, r.mode, r.dims).is_none_or(|best| r.seconds < best.seconds);
+            self.new_best = record::fastest(&self.history, r.mode, r.dims).is_some_and(|best| r.seconds < best.seconds);
         }
         storage::append_record(&r);
         storage::save_draft(None);
@@ -482,16 +470,20 @@ impl App {
     /// A field just laid starts its clock at the next poll, and a generation just started
     /// stamps its start there: ask for one now.
     fn wake_clock(&self, tx: &mut Tx) {
-        if self.clock_waits || (self.generating.is_some() && self.generating_since.is_none()) {
+        if self.clock_waits || self.generating.as_ref().is_some_and(|g| g.since.is_none()) {
             tx.wake_after(Duration::ZERO);
         }
+    }
+
+    /// A field being generated takes no input, nor one under a review or waiting for one.
+    pub(crate) fn waits(&self) -> bool {
+        self.generating.is_some() || self.review.is_some() || self.review_laying.is_some()
     }
 
     /// A release on the board.
     fn release(&mut self, chord: bool, cell: Option<usize>) {
         let Some(i) = cell else { return };
-        // A field being generated takes no input, nor one waiting out a review.
-        if self.generating.is_some() || self.review.is_some() {
+        if self.waits() {
             return;
         }
         if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
@@ -519,8 +511,8 @@ impl App {
             return;
         }
         if !self.game.started && !chord {
-            // Classic keeps its field as dealt: replaying the first click moves a mine again.
-            self.record.layout = Layout::Mines((0..self.game.cells.len()).filter(|&j| self.game.cells[j].mine).collect());
+            // Classic keeps its field as dealt: playing the first click again moves a mine again.
+            self.record.layout = Layout::Mines(self.game.mine_cells());
         }
         self.play(chord, i);
     }
@@ -678,6 +670,9 @@ impl App {
         if self.generating.is_some() && self.poll_generation(tx) {
             return true;
         }
+        if self.review_laying.is_some() && self.poll_review_laying(tx) {
+            return true;
+        }
         if let Some((t, _)) = self.moments.boom.filter(|_| !self.shock_done) {
             if now - t >= crate::gfx::SHOCK_FOR {
                 self.shock_done = true;
@@ -731,7 +726,7 @@ impl App {
         }
         // Without a waker nothing says when the field lands: look a few times a second.
         let check = if self.waker.is_some() { f64::INFINITY } else { 1.0 / 30.0 };
-        let since = *self.generating_since.get_or_insert(self.now);
+        let since = *job.since.get_or_insert(self.now);
         let due = since + Self::SWEEP_AFTER - self.now;
         if due > 0.0 {
             tx.wake_after(Duration::from_secs_f64(due.min(check)));
@@ -741,11 +736,29 @@ impl App {
             tx.wake_after(Duration::from_secs_f64(check));
         }
         // The sweep mounts at the first poll past 600 ms.
-        if self.sweep_from.is_none() {
-            self.sweep_from = Some(since + Self::SWEEP_AFTER);
+        if job.sweep_from.is_none() {
+            job.sweep_from = Some(since + Self::SWEEP_AFTER);
             return true;
         }
         false
+    }
+
+    /// A review's field being laid: opens the review once it lands (true).
+    fn poll_review_laying(&mut self, tx: &mut Tx) -> bool {
+        let Some((i, job)) = &mut self.review_laying else { return false };
+        let Some(base) = job.take() else {
+            // Without a waker nothing says when it lands: look a few times a second.
+            if self.waker.is_none() {
+                tx.wake_after(Duration::from_secs_f64(1.0 / 30.0));
+            }
+            return false;
+        };
+        let i = *i;
+        self.review_laying = None;
+        if let Some(r) = self.history.get(i) {
+            self.review = Some(Review::of(r, base));
+        }
+        true
     }
 
     /// Arrow keys move the selector a square at a time, at once (keys never animate).

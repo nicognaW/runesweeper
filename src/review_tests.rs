@@ -108,7 +108,7 @@ fn any_history_record_opens_in_review_in_every_mode() {
 fn scripted() -> Record {
     let rows = ["*..........*", "............", "**...*..*.**"];
     let w = rows[0].len();
-    let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
+    let mines = crate::test_fields::drawn(&rows, '*');
     let mv = |ms, act, x: usize, y: usize| Move { ms, act, cell: y * w + x };
     let moves = vec![
         mv(0, Act::Open, 5, 0),
@@ -209,7 +209,7 @@ fn a_review_speaks_zh_cn_and_never_gives_odds() {
                     assert!(!l.contains(banned), "{w:?}");
                 }
                 if lang == Lang::ZhCn {
-                    let rest = w.replace("3BV/s", "").replace("3BV", "").replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
+                    let rest = w.replace("3BV/s", "").replace("3BV", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
                     assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English");
                 }
             }
@@ -287,7 +287,7 @@ fn forced_guess_markers_are_the_forced_guesses_history_counts() {
             }
         }
         let r = a.history.last().unwrap().clone();
-        let review = crate::review::Review::of(&r);
+        let review = crate::review::Review::of(&r, r.base().expect("its mines"));
         let forced = review.markers.iter().filter(|m| matches!(m.kind, crate::review::Kind::Forced { .. })).count();
         assert_eq!(forced as u32, r.forced, "seed {seed}");
         assert_eq!(review.stats.three_bv, r.three_bv, "seed {seed}");

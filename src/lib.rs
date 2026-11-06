@@ -40,6 +40,8 @@ mod generating_tests;
 mod max_guess_tests;
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod test_fields;
 
 use app::App;
 use game::Level;

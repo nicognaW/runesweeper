@@ -84,9 +84,7 @@ strings! {
     WonIn1: "Cleared in 1 second", "胜利！用时 1 秒";
     WonIn: "Cleared in {} seconds", "胜利！用时 {} 秒";
     NewBest: "New best for {}", "{}新纪录";
-    WonAgain: "F2 or the face for another", "按 F2 或笑脸再来一局";
     Lost: "Boom.", "失败";
-    LostAgain: "F2 or the face to try again", "按 F2 或笑脸重新开始";
     // Max Guess: the true 50/50s the field forces, before play and on the result banner.
     FiftyCount: "Forced 50/50s: {}", "死猜：{} 处";
     FiftySurvived: "Forced 50/50s survived: {} of {}", "闯过死猜：{} / {} 处";
@@ -131,7 +129,7 @@ strings! {
     MarkForced: "Forced guess", "必须猜";
     MarkChord: "A chord saves clicks", "双击可省点击";
     SumNeedless: "You opened a cell nothing proved, while a safe cell could be proven.", "这一步猜了一格，其实这时已经能推出安全格。";
-    SumMissed: "You paused {} here, while a safe cell could be proven.", "你在这里停了 {}，其实这时已经能推出安全格。";
+    SumMissed: "You paused {} here, while a cell could be proven.", "你在这里停了 {}，其实这时已经有格子能推出来。";
     SumForced: "No cell could be proven safe: the guess was forced, but not a true 50/50.", "推不出任何安全格，只能猜，但这不是死猜。";
     SumForcedFifty: "No cell could be proven safe: the guess was forced, a true 50/50.", "推不出任何安全格，只能猜：这是死猜。";
     ChordReason1: "This {} has its {} flagged, so the cells left around it are safe. One chord on it opens them all: 1 click saved.", "看这个 {}，它周围的 {}都已标好……所以剩下的格子都安全。在它上面双击一次就能全部打开，省下 1 次点击。";

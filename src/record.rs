@@ -7,7 +7,7 @@
 //! only if a field changes meaning.
 
 use crate::game::{Cover, Game, Level, Mode};
-use crate::generate::{self, Dims};
+use crate::generate::LevelSize;
 
 /// The line format's version.
 const VERSION: u32 = 1;
@@ -96,8 +96,10 @@ impl Move {
 /// Where the field's mines came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Layout {
-    /// The new modes: [`generate::lay`] from the seed and first click.
-    Seeded { seed: u64, first: usize },
+    /// The new modes: [`crate::generate::lay`] from the seed and first click, and the mines it laid
+    /// (`laid=`), so a review needn't lay the field again. Records written before they kept
+    /// them have only the seed and first click.
+    Seeded { seed: u64, first: usize, laid: Option<Vec<usize>> },
     /// Classic: the mines as dealt at New Game, before XP moves a first-click mine.
     Mines(Vec<usize>),
 }
@@ -109,7 +111,7 @@ pub struct Record {
     pub at: u64,
     pub mode: Mode,
     /// Columns, rows, mines: the level.
-    pub dims: Dims,
+    pub dims: LevelSize,
     pub end: End,
     /// The timer when the game ended.
     pub seconds: u32,
@@ -130,7 +132,7 @@ pub struct Record {
 
 impl Record {
     /// An empty record for a field of `mode` at `dims`.
-    pub fn new(mode: Mode, dims: Dims) -> Record {
+    pub fn new(mode: Mode, dims: LevelSize) -> Record {
         Record {
             at: 0,
             mode,
@@ -160,22 +162,24 @@ impl Record {
         [Level::Beginner, Level::Intermediate, Level::Expert].into_iter().find(|l| l.dims() == Some(self.dims)).unwrap_or(Level::Custom)
     }
 
-    /// The field at the end of the game, rebuilt from its layout and moves.
-    pub fn replay(&self) -> Game {
-        let mut g = self.base();
+    /// The field at the end of the game, rebuilt from its layout and moves (None until a
+    /// record without its mines is laid: see [`Record::base`]).
+    pub fn rebuild(&self) -> Option<Game> {
+        let mut g = self.base()?;
         for m in &self.moves {
             m.apply(&mut g);
         }
-        g
+        Some(g)
     }
 
-    /// The field as laid, before any click: Classic's mines as dealt, the new modes' laid
-    /// from the seed and first click.
-    pub fn base(&self) -> Game {
+    /// The field as laid, before any click: Classic's mines as dealt, the new modes' as laid.
+    /// None for a new mode's record that kept only its seed and first click: laying it again
+    /// can take seconds, so it is laid off the UI thread ([`crate::generating`]).
+    pub fn base(&self) -> Option<Game> {
         let (w, h, _) = self.dims;
         match &self.layout {
-            Layout::Mines(m) => Game::with_mines(w, h, m),
-            Layout::Seeded { seed, first } => generate::lay(self.mode, self.dims, *seed, *first),
+            Layout::Mines(m) | Layout::Seeded { laid: Some(m), .. } => Some(Game::with_mines(w, h, m)),
+            Layout::Seeded { laid: None, .. } => None,
         }
     }
 
@@ -198,7 +202,12 @@ impl Record {
             self.survived,
         );
         match &self.layout {
-            Layout::Seeded { seed, first } => out += &format!(" seed={seed} first={first}"),
+            Layout::Seeded { seed, first, laid } => {
+                out += &format!(" seed={seed} first={first}");
+                if let Some(m) = laid {
+                    out += &format!(" laid={}", join(m.iter()));
+                }
+            }
             Layout::Mines(m) => out += &format!(" field={}", join(m.iter())),
         }
         out += " moves=";
@@ -210,7 +219,7 @@ impl Record {
     /// line cut short).
     pub fn parse(line: &str) -> Option<Record> {
         let mut r = Record::new(Mode::Classic, (0, 0, 0));
-        let (mut version, mut mode, mut end, mut seed, mut first, mut field) = (None, None, None, None, None, None);
+        let (mut version, mut mode, mut end, mut seed, mut first, mut field, mut laid) = (None, None, None, None, None, None, None);
         for (k, v) in line.split_whitespace().filter_map(|f| f.split_once('=')) {
             let n = || v.parse::<u32>().ok();
             match k {
@@ -235,6 +244,7 @@ impl Record {
                 "seed" => seed = v.parse::<u64>().ok(),
                 "first" => first = v.parse::<usize>().ok(),
                 "field" => field = Some(split(v).map(|c| c.parse().ok()).collect::<Option<Vec<usize>>>()?),
+                "laid" => laid = split(v).map(|c| c.parse().ok()).collect::<Option<Vec<usize>>>(),
                 "moves" => r.moves = split(v).map(parse_move).collect::<Option<_>>()?,
                 _ => {}
             }
@@ -248,7 +258,8 @@ impl Record {
         r.mode = mode?;
         r.end = end?;
         r.layout = match (seed, first, field) {
-            (Some(seed), Some(first), _) if first < cells => Layout::Seeded { seed, first },
+            // Mines that don't fit the field are dropped: the seed and first click still name it.
+            (Some(seed), Some(first), _) if first < cells => Layout::Seeded { seed, first, laid: laid.filter(|m: &Vec<usize>| m.iter().all(|&c| c < cells)) },
             (_, _, Some(m)) if m.iter().all(|&c| c < cells) => Layout::Mines(m),
             _ => return None,
         };
@@ -271,7 +282,7 @@ fn parse_move(s: &str) -> Option<Move> {
 }
 
 /// The fastest win among `records` for `mode` at `dims`; of equal times, the earliest.
-pub fn fastest(records: &[Record], mode: Mode, dims: Dims) -> Option<&Record> {
+pub fn fastest(records: &[Record], mode: Mode, dims: LevelSize) -> Option<&Record> {
     records.iter().filter(|r| r.end == End::Won && r.mode == mode && r.dims == dims).min_by_key(|r| (r.seconds, r.at))
 }
 
@@ -316,12 +327,7 @@ pub fn three_bv(game: &Game) -> (u32, u32) {
 mod tests {
     use super::*;
 
-    /// A field drawn as rows, `*` for a mine.
-    fn field(rows: &[&str]) -> Game {
-        let w = rows[0].len();
-        let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
-        Game::with_mines(w, rows.len(), &mines)
-    }
+    use crate::test_fields::mined as field;
 
     #[test]
     fn three_bv_matches_counts_worked_by_hand() {
@@ -381,8 +387,23 @@ mod tests {
         let line = r.write();
         assert!(!line.contains('\n'), "one line: {line}");
         assert_eq!(Record::parse(&line), Some(r.clone()));
-        let seeded = Record { mode: Mode::NoGuess, layout: Layout::Seeded { seed: u64::MAX - 7, first: 40 }, ..r };
-        assert_eq!(Record::parse(&seeded.write()), Some(seeded));
+        let seeded = Record { mode: Mode::NoGuess, layout: Layout::Seeded { seed: u64::MAX - 7, first: 40, laid: Some(vec![0, 9, 17, 80]) }, ..r };
+        assert_eq!(Record::parse(&seeded.write()), Some(seeded.clone()));
+        // Written before records kept the mines as laid: the seed and first click alone.
+        let older = Record { layout: Layout::Seeded { seed: 3, first: 40, laid: None }, ..seeded };
+        assert_eq!(Record::parse(&older.write()), Some(older.clone()));
+        assert!(!older.write().contains("laid="));
+    }
+
+    #[test]
+    fn a_record_rebuilds_its_field_only_from_mines_it_keeps() {
+        let field = |r: &Record| r.base().map(|g| g.mine_cells());
+        let classic = Record { layout: Layout::Mines(vec![1, 2]), ..Record::new(Mode::Classic, (9, 9, 2)) };
+        assert_eq!(field(&classic), Some(vec![1, 2]));
+        let laid = Record { layout: Layout::Seeded { seed: 5, first: 40, laid: Some(vec![0, 80]) }, ..Record::new(Mode::NoGuess, (9, 9, 2)) };
+        assert_eq!(field(&laid), Some(vec![0, 80]));
+        let older = Record { layout: Layout::Seeded { seed: 5, first: 40, laid: None }, ..laid };
+        assert_eq!(field(&older), None, "to be laid off the UI thread");
     }
 
     #[test]

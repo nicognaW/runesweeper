@@ -13,11 +13,11 @@ fn han(w: &str) -> bool {
     w.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
 }
 
-/// No English left on screen: the only Latin letters are F2's, the font credit's "MiSans"
+/// No English left on screen: the only Latin letters are the font credit's "MiSans"
 /// (a name) and the switch's own "English", which names the language in itself.
 fn assert_all_zh_cn(rt: &Runtime<App>, when: &str) {
     for w in words(rt) {
-        let rest = w.replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
+        let rest = w.replace("MiSans", "").replace(Lang::En.endonym(), "");
         assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English ({when})");
     }
 }

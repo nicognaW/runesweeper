@@ -4,7 +4,7 @@
 use rune::{Env, Key, KeyEvent, Mods, Runtime};
 
 use crate::app::App;
-use crate::game::Level;
+use crate::game::{Cover, Level};
 use crate::storage::Saved;
 use crate::ui;
 
@@ -75,6 +75,35 @@ fn no_xp_menu_bar_dialogs_or_help_text_are_drawn() {
             }
         }
     }
+}
+
+#[test]
+fn the_result_banner_says_how_it_went_and_nothing_more() {
+    // A loss: a safe square first (so the mine isn't moved), then a mine.
+    let mut rt = runtime(Saved::default());
+    rt.update(|s, _| {
+        let g = &mut s.game;
+        g.start();
+        let safe = (0..g.cells.len()).find(|&i| !g.cells[i].mine).unwrap();
+        let _ = g.open(safe);
+        let mine = (0..g.cells.len()).find(|&i| g.cells[i].mine).unwrap();
+        let _ = g.open(mine);
+    });
+    settle(&mut rt);
+    assert_eq!(text_in(&rt, &format!("banner-words{}", rt.state.field)), "Boom.");
+
+    // A win that beats no fastest win.
+    let mut rt = runtime(Saved::default());
+    rt.update(|s, _| {
+        for i in 0..s.game.cells.len() {
+            if !s.game.cells[i].mine && s.game.cells[i].cover != Cover::Open {
+                let _ = s.game.open(i);
+            }
+        }
+        s.seconds = 37;
+    });
+    settle(&mut rt);
+    assert_eq!(text_in(&rt, &format!("banner-words{}", rt.state.field)), "Cleared in 37 seconds");
 }
 
 #[test]
