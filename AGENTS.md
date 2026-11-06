@@ -14,4 +14,4 @@ Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Git workflow
 
-No pull requests. Commit and push directly to `main`.
+No pull requests. Every session, including Claude sessions, merges its changes into `main` and pushes `main`. If a session works on another branch, it merges that branch into `main` before finishing.
