@@ -2,10 +2,12 @@
 
 pub mod app;
 pub mod board;
+pub mod callout;
 pub mod fonts;
 pub mod game;
 pub mod generate;
 pub mod gfx;
+pub mod hint;
 pub mod history;
 pub mod icons;
 pub mod locale;
@@ -27,6 +29,8 @@ mod generate_tests;
 mod mode_tests;
 #[cfg(test)]
 mod record_tests;
+#[cfg(test)]
+mod hint_tests;
 
 use app::App;
 use game::Level;
@@ -123,6 +127,17 @@ const SCENES: &[(&str, fn(&mut App))] = &[
             rec(31, record::End::Won, 38, 1, 1),
         ];
         a.toggle_panel(app::Panel::History);
+    }),
+    ("hint", |a| {
+        *a = scene(Level::Intermediate, 11);
+        play(a, &[(8, 8)]);
+        for _ in 0..4 {
+            a.press_hint();
+        }
+    }),
+    ("hint-zh-cn", |a| {
+        SCENES.iter().find(|s| s.0 == "hint").unwrap().1(a);
+        a.set_lang(strings::Lang::ZhCn);
     }),
     ("settings", |a| {
         *a = scene(Level::Beginner, 7);
