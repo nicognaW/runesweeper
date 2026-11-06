@@ -6,7 +6,7 @@ use rune_kit::{Kit, Switch, TextInput};
 use rune_motion::SpringPair;
 
 use crate::app::{App, Panel};
-use crate::game::Level;
+use crate::game::{Level, Mode};
 use crate::icons::flag;
 use crate::strings::{Lang, S};
 use crate::style::*;
@@ -48,17 +48,17 @@ fn tool(key: &str, label: &str, glyph: El, p: &Palette) -> El {
     well(el().key(key).size(36.0, 30.0).radius(9.0)).center().role("button").label(label.to_string()).focusable(true).press_scale(0.94).hover(p.tile_hover).child(glyph)
 }
 
-/// The Level chip: the current Level, and the picker it opens.
+/// The chip: the current Mode and Level, and the picker it opens.
 fn chip(s: &App, p: &Palette) -> El {
-    let name = s.tr(S::level(s.level));
-    let mut label = row().gap(6.0).center_y().child(text(name).font(UI_BOLD).color(p.text));
+    let (mode, name) = (s.tr(S::mode(s.mode)), s.tr(S::level(s.level)));
+    let mut label = row().gap(6.0).center_y().child(text(mode).font(UI).color(p.muted)).child(text(name).font(UI_BOLD).color(p.text));
     if s.level == Level::Custom {
         label = label.child(text(sizes(s.dims())).font(SMALL).color(p.muted));
     }
     well(row().key("level-chip").h(30.0).px(12.0).gap(6.0).radius(9.0))
         .center_y()
         .role("button")
-        .label(name.to_string())
+        .label(format!("{mode} · {name}"))
         .expanded(s.panel == Some(Panel::Picker))
         .focusable(true)
         .press_scale(0.97)
@@ -120,8 +120,33 @@ fn choice(key: &str, on: bool, p: &Palette) -> El {
     if on { r.border(1.0, p.accent.alpha(0.8)) } else { r }
 }
 
+/// The Mode row: one segment per Mode, the current one lit. A press starts a new field in it.
+fn modes(s: &App, p: &Palette) -> El {
+    let mut options = row().key("modes").role("radiogroup").label(s.tr(S::ModeRow)).w_full().h(40.0).px(4.0).gap(4.0).center_y();
+    for m in Mode::ALL {
+        let on = s.mode == m;
+        let name = s.tr(S::mode(m));
+        let mut o = el()
+            .key(format!("mode-{}", m.tag()))
+            .h(32.0)
+            .grow(1.0)
+            .radius(7.0)
+            .center()
+            .role("radio")
+            .label(name.to_string())
+            .checked(on)
+            .focusable(true)
+            .press_scale(0.96)
+            .on_press(move |s: &mut App| s.pick_mode(m))
+            .child(text(name).font(UI_BOLD).color(if on { p.text } else { p.muted }));
+        o = if on { o.fill(p.accent.alpha(0.22)).border(1.0, p.accent.alpha(0.8)) } else { o.hover(p.tile_hover) };
+        options = options.child(o);
+    }
+    well(options.radius(10.0))
+}
+
 fn picker(s: &App, k: &Kit, p: &Palette) -> El {
-    let mut body = col().w(270.0).gap(6.0);
+    let mut body = col().w(270.0).gap(6.0).child(modes(s, p));
     for l in LEVELS {
         let detail = l.dims().map(sizes);
         let name = s.tr(S::level(l));

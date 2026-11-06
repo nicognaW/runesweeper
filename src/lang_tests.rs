@@ -39,11 +39,11 @@ fn switching_language_in_settings_changes_every_string_at_once() {
     click(&mut rt, "settings-button");
     settle(&mut rt);
     assert_all_english(&rt, "before the switch");
-    assert_eq!(text_in(&rt, "level-chip"), "Beginner");
+    assert_eq!(text_in(&rt, "level-chip"), "Classic Beginner");
     click(&mut rt, "lang-zh-CN");
     // The very next frame, with no settling.
     assert_eq!(rt.state.lang, Lang::ZhCn);
-    assert_eq!(text_in(&rt, "level-chip"), "初级");
+    assert_eq!(text_in(&rt, "level-chip"), "原版 初级");
     let shown = words(&rt);
     for w in ["设置", "问号标记", "颜色", "语言", "新游戏", "雷区"] {
         assert!(shown.iter().any(|s| s == w), "{w} on screen: {shown:?}");
@@ -52,7 +52,7 @@ fn switching_language_in_settings_changes_every_string_at_once() {
     assert_all_zh_cn(&rt, "after the switch");
     assert!(rt.find("settings").is_some(), "Settings stays open while switching");
     click(&mut rt, "lang-en");
-    assert_eq!(text_in(&rt, "level-chip"), "Beginner");
+    assert_eq!(text_in(&rt, "level-chip"), "Classic Beginner");
     assert_all_english(&rt, "after switching back");
 }
 
@@ -66,7 +66,7 @@ fn the_language_survives_a_restart() {
     let file = rt.state.saved.write();
     let rt = runtime(Saved::parse(&file));
     assert_eq!(rt.state.lang, Lang::ZhCn);
-    assert_eq!(text_in(&rt, "level-chip"), "初级");
+    assert_eq!(text_in(&rt, "level-chip"), "原版 初级");
     assert_all_zh_cn(&rt, "after a restart");
 }
 
@@ -76,14 +76,14 @@ fn the_picker_speaks_zh_cn() {
     click(&mut rt, "level-chip");
     settle(&mut rt);
     let shown = words(&rt);
-    for w in ["初级", "中级", "高级", "自定义", "宽度", "高度", "雷数"] {
+    for w in ["原版", "无猜", "初级", "中级", "高级", "自定义", "宽度", "高度", "雷数"] {
         assert!(shown.iter().any(|s| s == w), "{w} in the picker: {shown:?}");
     }
     assert_all_zh_cn(&rt, "the picker");
     click(&mut rt, "pick-expert");
     settle(&mut rt);
     assert_eq!(rt.state.level, Level::Expert);
-    assert_eq!(text_in(&rt, "level-chip"), "高级");
+    assert_eq!(text_in(&rt, "level-chip"), "原版 高级");
 }
 
 #[test]

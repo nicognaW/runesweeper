@@ -18,7 +18,7 @@ and shockwaves.
 </p>
 <p align="center">
   <img src="docs/won.webp" alt="A won game" width="40%">
-  <img src="docs/picker.webp" alt="The Level picker" width="40%">
+  <img src="docs/picker.webp" alt="The Mode and Level picker" width="40%">
 </p>
 
 ## What moves, and what doesn't
@@ -76,8 +76,21 @@ not the rule behind published "safe first click" figures (Tu et al.'s 40.06%, fo
 where the first cell's mine goes anywhere else on the field. The bot's odds assume every
 layout equally likely and ignore the relocation's bias toward the top left.
 
+No Guess draws uniform fields, with the 3×3 around a first click anywhere on the field kept
+clear, until the bot clears one without guessing; there is no time limit and no mine is moved,
+so an accepted field is a uniform draw over the fields logic can finish. Over 1,000 fields per
+level (seed 1, release build, one native core):
+
+| Level | Fields accepted | Generation p50 | p99 |
+| --- | --- | --- | --- |
+| Beginner | 89.9% | 0.08 ms | 0.27 ms |
+| Intermediate | 70.7% | 0.42 ms | 1.8 ms |
+| Expert | 15.3% | 5.3 ms | 31 ms |
+
+The bot then wins every one of them without a guess.
+
 ```sh
-cargo run --release --example solver -- 10000 1   # games per level, seed
+cargo run --release --example solver -- 10000 1 1000   # Classic games per level, seed, No Guess fields
 ```
 
 It prints the same columns for Beginner and Intermediate; the same seed gives the same numbers.
@@ -107,7 +120,8 @@ The same game as Windows Minesweeper:
 - A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
-- **Toolbar**: the chip on the left shows the Level and opens the picker: Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
+- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. The timer starts once the field is ready.
+- **Toolbar**: the chip on the left shows the Mode and Level and opens the picker: a row for the Mode, then Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
 - **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Chinese is drawn in Xiaomi's MiSans and Latin letters and digits in Inter, both built in, so Chinese shows on any machine and in the browser.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 

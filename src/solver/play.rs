@@ -53,3 +53,25 @@ pub fn guess(v: &View, facts: &[Fact]) -> Option<usize> {
         Err(_) => candidates.min_by_key(|&i| (v.nbrs(i).iter().filter(|&&j| v.open[j].is_some()).count(), i)),
     }
 }
+
+/// Whether the bot at `strength` finishes `game` from a first click on `first` without a
+/// single guess. Stops at the first position with nothing proven.
+pub fn clears(game: &Game, first: usize, strength: Strength) -> bool {
+    let mut game = game.clone();
+    let mut facts = vec![Fact::Unknown; game.w * game.h];
+    game.open(first);
+    while game.status == Status::Playing {
+        let proofs = deduce(&View::of(&game), &facts, strength);
+        if proofs.is_empty() {
+            return false;
+        }
+        for p in proofs {
+            if p.mine {
+                facts[p.cell] = Fact::Mine;
+            } else {
+                game.open(p.cell);
+            }
+        }
+    }
+    game.status == Status::Won
+}

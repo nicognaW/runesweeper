@@ -80,7 +80,7 @@ fn no_xp_menu_bar_dialogs_or_help_text_are_drawn() {
 #[test]
 fn the_level_chip_names_the_level_and_opens_the_picker() {
     let mut rt = runtime(Saved::default());
-    assert_eq!(text_in(&rt, "level-chip"), "Beginner");
+    assert_eq!(text_in(&rt, "level-chip"), "Classic Beginner");
     assert!(!shown(&rt, "picker"));
     click(&mut rt, "level-chip");
     settle(&mut rt);
@@ -102,7 +102,7 @@ fn picking_a_level_starts_a_new_field_at_once() {
     assert_eq!((rt.state.game.w, rt.state.game.h, rt.state.game.mines), (30, 16, 99));
     assert!(rt.state.field > field, "a new field");
     assert!(!shown(&rt, "picker"), "picking closes the picker");
-    assert_eq!(text_in(&rt, "level-chip"), "Expert");
+    assert_eq!(text_in(&rt, "level-chip"), "Classic Expert");
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn custom_sizes_are_typed_inline_and_clamped_as_xp_does() {
     assert_eq!((rt.state.game.w, rt.state.game.h, rt.state.game.mines), (30, 9, 29 * 8));
     assert_eq!(rt.state.saved.custom, (30, 9, 232));
     assert!(!shown(&rt, "picker"));
-    assert!(text_in(&rt, "level-chip").starts_with("Custom"));
+    assert!(text_in(&rt, "level-chip").starts_with("Classic Custom"));
 }
 
 #[test]
