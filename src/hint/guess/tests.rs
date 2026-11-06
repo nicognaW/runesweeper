@@ -15,17 +15,9 @@ struct Pos {
 }
 
 fn pos(rows: &[&str]) -> Pos {
-    let w = rows[0].len();
-    let at = |c: char| rows.iter().enumerate().flat_map(move |(y, r)| r.char_indices().filter(move |&(_, ch)| ch == c).map(move |(x, _)| y * w + x)).collect::<Vec<_>>();
-    let mut g = Game::with_mines(w, rows.len(), &[at('*'), at('F')].concat());
-    for i in at('.') {
-        g.cells[i].cover = Cover::Open;
-    }
-    for i in [at('F'), at('x')].concat() {
-        g.cells[i].cover = Cover::Flag;
-    }
+    let g = crate::test_fields::position(rows);
     let flags = g.cells.iter().map(|c| c.cover == Cover::Flag).collect();
-    Pos { v: View::of(&g), flags, w }
+    Pos { v: View::of(&g), flags, w: g.w }
 }
 
 impl Pos {

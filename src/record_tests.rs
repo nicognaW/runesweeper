@@ -12,10 +12,8 @@ use crate::toolbar_tests::{click, press, runtime, settle, shown, text_in, words}
 
 /// A Classic App on the field drawn as rows, `*` for a mine.
 fn on(rows: &[&str]) -> App {
-    let w = rows[0].len();
-    let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
     let mut a = App::with(Saved::default(), 3);
-    a.game = Game::with_mines(w, rows.len(), &mines);
+    a.game = crate::test_fields::mined(rows);
     a
 }
 

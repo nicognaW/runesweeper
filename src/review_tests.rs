@@ -108,7 +108,7 @@ fn any_history_record_opens_in_review_in_every_mode() {
 fn scripted() -> Record {
     let rows = ["*..........*", "............", "**...*..*.**"];
     let w = rows[0].len();
-    let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
+    let mines = crate::test_fields::drawn(&rows, '*');
     let mv = |ms, act, x: usize, y: usize| Move { ms, act, cell: y * w + x };
     let moves = vec![
         mv(0, Act::Open, 5, 0),

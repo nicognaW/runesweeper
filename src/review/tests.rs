@@ -9,7 +9,7 @@ use crate::record::{Act, End, Layout, Move, Record};
 /// A Classic record on the field drawn as rows (`*` a mine), with `moves` as (ms, act, x, y).
 fn scripted(rows: &[&str], end: End, moves: &[(u32, char, usize, usize)]) -> Record {
     let w = rows[0].len();
-    let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
+    let mines = crate::test_fields::drawn(rows, '*');
     let moves = moves
         .iter()
         .map(|&(ms, a, x, y)| {

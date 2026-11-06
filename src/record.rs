@@ -327,12 +327,7 @@ pub fn three_bv(game: &Game) -> (u32, u32) {
 mod tests {
     use super::*;
 
-    /// A field drawn as rows, `*` for a mine.
-    fn field(rows: &[&str]) -> Game {
-        let w = rows[0].len();
-        let mines: Vec<usize> = rows.iter().enumerate().flat_map(|(y, r)| r.char_indices().filter(|c| c.1 == '*').map(move |(x, _)| y * w + x)).collect();
-        Game::with_mines(w, rows.len(), &mines)
-    }
+    use crate::test_fields::mined as field;
 
     #[test]
     fn three_bv_matches_counts_worked_by_hand() {
