@@ -9,20 +9,12 @@ use crate::icons::Mood;
 use crate::storage::{self, Saved};
 use crate::style::{PITCH, WELL, window_size};
 
+/// The panels the toolbar opens, one at a time.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Menu {
-    Game,
-    Help,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Dialog {
-    Custom,
-    BestTimes,
-    /// A new best time for this level index: ask for a name.
-    Record(usize),
-    About,
-    HowTo,
+pub enum Panel {
+    /// The Level picker, with Custom's sizes inline.
+    Picker,
+    Settings,
 }
 
 /// The board's pointer state, as the original tracks its buttons.
@@ -61,8 +53,8 @@ pub struct App {
     pub seconds: u32,
     pub press: Press,
     pub face_down: bool,
-    pub menu: Option<Menu>,
-    pub dialog: Option<Dialog>,
+    /// The open panel, if any.
+    pub panel: Option<Panel>,
     pub moments: Moments,
     pub reduced: bool,
     /// The hover selector's position on the field, and whether it shows.
@@ -77,9 +69,11 @@ pub struct App {
     pub pixel_safe: bool,
     /// Touch screens have no right button: while on, a tap flags (a tap on a number chords).
     pub flag_mode: bool,
+    /// The toolbar offers the flag toggle (the web build, which phones use).
+    pub touch: bool,
     /// Whether this field deals its tiles in (not when a key asked for it).
     pub deal: bool,
-    /// The last win beat the level's best time.
+    /// The last win beat the fastest win for its level (set once History keeps records).
     pub new_best: bool,
     /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
     pub banner_done: bool,
@@ -87,10 +81,10 @@ pub struct App {
     pub shock_done: bool,
     /// Draw the app icon instead of the game (the `icon` scene).
     pub icon: bool,
+    /// Custom's sizes as typed in the picker.
     pub edit_w: TextEdit,
     pub edit_h: TextEdit,
     pub edit_m: TextEdit,
-    pub edit_name: TextEdit,
 }
 
 impl App {
@@ -112,8 +106,7 @@ impl App {
             seconds: 0,
             press: Press::default(),
             face_down: false,
-            menu: None,
-            dialog: None,
+            panel: None,
             moments: Moments::default(),
             reduced: false,
             hover_at: Live::new([0.0, 0.0]),
@@ -125,13 +118,13 @@ impl App {
             icon: false,
             deal: true,
             flag_mode: false,
+            touch: cfg!(target_arch = "wasm32"),
             new_best: false,
             banner_done: false,
             shock_done: false,
             edit_w: TextEdit::new(""),
             edit_h: TextEdit::new(""),
             edit_m: TextEdit::new(""),
-            edit_name: TextEdit::new(""),
         }
     }
 
@@ -220,10 +213,6 @@ impl App {
     fn release_at(&mut self, chord: bool, i: usize) {
         self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
-        if out != Outcome::Nothing && !self.saved.played {
-            self.saved.played = true;
-            storage::save(&self.saved);
-        }
         self.start_clock();
         match out {
             Outcome::Nothing | Outcome::Opened(_) => {}
@@ -234,32 +223,8 @@ impl App {
             Outcome::Won => {
                 self.moments.won = Some(self.now);
                 self.started_at = None;
-                self.record();
             }
         }
-    }
-
-    fn record(&mut self) {
-        let Some(li) = self.level.index() else { return };
-        if self.seconds < self.saved.best[li].0 {
-            self.new_best = true;
-            // Windows offers the name already on the record, usually the player's own.
-            self.edit_name = TextEdit::new(&self.saved.best[li].1);
-            self.dialog = Some(Dialog::Record(li));
-        }
-    }
-
-    pub fn save_record(&mut self, li: usize) {
-        // Windows' name box holds 32 characters, and a blank name stays blank.
-        let name: String = self.edit_name.text.trim().chars().take(32).collect();
-        self.saved.best[li] = (self.seconds, name);
-        storage::save(&self.saved);
-        self.dialog = Some(Dialog::BestTimes);
-    }
-
-    pub fn reset_scores(&mut self) {
-        self.saved.best = Saved::default().best;
-        storage::save(&self.saved);
     }
 
     pub fn toggle_marks(&mut self) {
@@ -273,21 +238,35 @@ impl App {
         storage::save(&self.saved);
     }
 
-    /// The dialog starts from the field being played, as Windows' does.
-    pub fn open_custom(&mut self) {
-        let (w, h, m) = self.dims();
-        self.edit_h = TextEdit::new(&h.to_string());
-        self.edit_w = TextEdit::new(&w.to_string());
-        self.edit_m = TextEdit::new(&m.to_string());
-        self.dialog = Some(Dialog::Custom);
+    /// Opens `panel`, or closes it if it is the one open. The picker's Custom sizes start from
+    /// the saved Custom field.
+    pub fn toggle_panel(&mut self, panel: Panel) {
+        if self.panel == Some(panel) {
+            self.panel = None;
+            return;
+        }
+        if panel == Panel::Picker {
+            let (w, h, m) = self.saved.custom;
+            self.edit_w = TextEdit::new(&w.to_string());
+            self.edit_h = TextEdit::new(&h.to_string());
+            self.edit_m = TextEdit::new(&m.to_string());
+        }
+        self.panel = Some(panel);
     }
 
-    pub fn apply_custom(&mut self, tx: &mut Tx) {
-        let n = |e: &TextEdit, d: usize| e.text.trim().parse::<usize>().unwrap_or(d);
-        let (w0, h0, m0) = self.saved.custom;
-        self.saved.custom = clamp_custom(n(&self.edit_w, w0), n(&self.edit_h, h0), n(&self.edit_m, m0));
-        self.dialog = None;
-        self.set_level(Level::Custom, tx);
+    pub fn close_panel(&mut self) {
+        self.panel = None;
+    }
+
+    /// A Level from the picker: a new field at once. Custom takes the sizes typed inline.
+    pub fn pick_level(&mut self, level: Level, tx: &mut Tx) {
+        if level == Level::Custom {
+            let n = |e: &TextEdit, d: usize| e.text.trim().parse::<usize>().unwrap_or(d);
+            let (w0, h0, m0) = self.saved.custom;
+            self.saved.custom = clamp_custom(n(&self.edit_w, w0), n(&self.edit_h, h0), n(&self.edit_m, m0));
+        }
+        self.panel = None;
+        self.set_level(level, tx);
     }
 
     pub fn on_board_drag(&mut self, d: &rune::Drag, button: rune::PointerButton, tx: &mut Tx) {
@@ -441,8 +420,10 @@ impl App {
                 tx.settle();
                 true
             }
-            Key::Escape if self.menu.is_some() => {
-                self.menu = None;
+            // A key closes the panel in one frame: keys never animate.
+            Key::Escape if self.panel.is_some() => {
+                self.panel = None;
+                tx.instant();
                 true
             }
             // Once the word is typed, each Shift press turns the cheat on or off.
@@ -490,7 +471,7 @@ mod tests {
 
     #[test]
     fn flag_mode_flags_on_a_tap_and_chords_on_a_number() {
-        let mut a = App::with(Saved { played: true, ..Saved::default() }, 3);
+        let mut a = App::with(Saved::default(), 3);
         let safe = (0..a.game.cells.len()).find(|&i| !a.game.cells[i].mine && a.game.cells[i].adj > 0).unwrap();
         a.release(false, Some(safe));
         assert_eq!(a.game.cells[safe].cover, Cover::Open);

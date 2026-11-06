@@ -8,7 +8,7 @@ use runesweeper::{app::App, game::Level, storage::Saved, ui};
 const N: usize = 240;
 
 fn main() {
-    let saved = Saved { level: Level::Expert, played: true, ..Saved::default() };
+    let saved = Saved { level: Level::Expert, ..Saved::default() };
     let mut rt = Runtime::new(App::with(saved, 5), ui::view, (868.0, 598.0), Env { system_dark: true, scale: 2.0 });
     rt.frame(0.0);
     for _ in 0..30 {

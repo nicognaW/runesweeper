@@ -1,13 +1,13 @@
-//! The window: menu bar, console (counters, face, field) and the dialogs.
+//! The window: toolbar, console (counters, face, field) and the panels.
 
 use rune::{Cx, El, MotionIntent, col, effect, el, row, spacer, text};
-use rune_kit::{Button, ButtonVariant, Dialog as KitDialog, Kit, Menu as KitMenu, MenuItem, PaletteSeed, TextInput};
+use rune_kit::{Kit, PaletteSeed};
 
-use crate::app::{App, Dialog, Menu};
-use crate::game::{Level, Status};
+use crate::app::App;
+use crate::game::Status;
 use crate::icons::{digit, face, led_text};
 use crate::style::*;
-use crate::{board, gfx};
+use crate::{board, gfx, toolbar};
 
 fn kit(p: &Palette) -> Kit {
     let mut k = Kit::from_palette(PaletteSeed { bg: p.console_top, fg: p.text, accent: p.accent });
@@ -82,180 +82,6 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
 }
 
-fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
-    let trigger = |label: &str, m: Menu| {
-        Button::new(label)
-            .variant(ButtonVariant::Ghost)
-            .expanded(s.menu == Some(m))
-            .on_press(move |s: &mut App| s.menu = if s.menu == Some(m) { None } else { Some(m) })
-            .build(k)
-    };
-    let lvl = |l: Level| move |s: &mut App, tx: &mut rune::Tx| {
-        s.menu = None;
-        s.set_level(l, tx);
-    };
-    let game = KitMenu::new("game-menu")
-        .trigger(trigger("Game", Menu::Game))
-        .open(s.menu == Some(Menu::Game))
-        .min_width(210.0)
-        .item(MenuItem::new("New").shortcut("F2").on_select(|s: &mut App| {
-            s.menu = None;
-            s.new_game();
-        }))
-        .separator()
-        .item(MenuItem::new("Beginner").checked(s.level == Level::Beginner).on_select_tx(lvl(Level::Beginner)))
-        .item(MenuItem::new("Intermediate").checked(s.level == Level::Intermediate).on_select_tx(lvl(Level::Intermediate)))
-        .item(MenuItem::new("Expert").checked(s.level == Level::Expert).on_select_tx(lvl(Level::Expert)))
-        .item(MenuItem::new("Custom…").checked(s.level == Level::Custom).on_select(|s: &mut App| {
-            s.menu = None;
-            s.open_custom();
-        }))
-        .separator()
-        .item(MenuItem::new("Marks (?)").checked(s.saved.marks).on_select(|s: &mut App| {
-            s.menu = None;
-            s.toggle_marks();
-        }))
-        .item(MenuItem::new("Color").checked(s.saved.color).on_select(|s: &mut App| {
-            s.menu = None;
-            s.toggle_color();
-        }))
-        .separator()
-        .item(MenuItem::new("Best Times…").on_select(|s: &mut App| {
-            s.menu = None;
-            s.dialog = Some(Dialog::BestTimes);
-        }))
-        .separator()
-        .item(MenuItem::new("Exit").on_select_tx(|s: &mut App, tx| {
-            s.menu = None;
-            tx.quit();
-        }))
-        .on_close(|s: &mut App| s.menu = None)
-        .build(k, layer);
-    let help = KitMenu::new("help-menu")
-        .trigger(trigger("Help", Menu::Help))
-        .open(s.menu == Some(Menu::Help))
-        .min_width(190.0)
-        .item(MenuItem::new("How to Play").on_select(|s: &mut App| {
-            s.menu = None;
-            s.dialog = Some(Dialog::HowTo);
-        }))
-        .separator()
-        .item(MenuItem::new("About Runesweeper…").on_select(|s: &mut App| {
-            s.menu = None;
-            s.dialog = Some(Dialog::About);
-        }))
-        .on_close(|s: &mut App| s.menu = None)
-        .build(k, layer);
-    row().key("menubar")
-        .w_full()
-        .h(MENU_H)
-        .px(8.0)
-        .gap(2.0)
-        .center_y()
-        .fill(ca(0x000000, 0.25))
-        .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.06)))
-        .child(game)
-        .child(help)
-        .child(spacer())
-        .children(touch_first().then(|| {
-            Button::new(if s.flag_mode { "Flagging" } else { "Flag" })
-                .variant(if s.flag_mode { ButtonVariant::Contrast } else { ButtonVariant::Ghost })
-                .help("Taps place flags (F on a keyboard)")
-                .on_press(|s: &mut App| s.flag_mode = !s.flag_mode)
-                .build(k)
-        }))
-        .child(text(s.level.name()).font(SMALL).color(p.muted).mr(8.0))
-}
-
-fn field_row(label: &str, input: El, p: &Palette) -> El {
-    row().gap(12.0).center_y().child(text(label.to_string()).font(UI).color(p.text).w(64.0)).child(input)
-}
-
-fn dialogs(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) {
-    let Some(d) = s.dialog else { return };
-    // Dim and soften what's behind, so the dialog is the one thing to look at.
-    layer.push(
-        el().key("dialog-scrim")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .fill(ca(0x000000, 0.45))
-            .backdrop_blur(6.0)
-            .transition(rune::Transition::opacity().springs(rune_motion::SpringPair::new(rune::Spring::new(0.15, 0.0), rune::Spring::new(0.15, 0.0))))
-            .inert(),
-    );
-    let close = |s: &mut App| s.dialog = None;
-    let ok = |label: &str| Button::new(label).variant(ButtonVariant::Contrast);
-    let buttons = |a: El, b: Option<El>| row().gap(8.0).mt(8.0).child(spacer()).children(b).child(a);
-    match d {
-        Dialog::Custom => {
-            let input = |e: &rune::TextEdit, f: fn(&mut App) -> &mut rune::TextEdit| {
-                TextInput::new(e).width(Some(110.0)).on_edit(f).on_submit(|s: &mut App, tx| s.apply_custom(tx)).build(k)
-            };
-            let body = col()
-                .gap(10.0)
-                .child(field_row("Height", input(&s.edit_h, |s| &mut s.edit_h), p))
-                .child(field_row("Width", input(&s.edit_w, |s| &mut s.edit_w), p))
-                .child(field_row("Mines", input(&s.edit_m, |s| &mut s.edit_m), p))
-                .child(text("Height 9–24, width 9–30.").font(SMALL).color(p.muted))
-                .child(buttons(
-                    ok("OK").on_press_tx(|s: &mut App, tx| s.apply_custom(tx)).build(k),
-                    Some(Button::new("Cancel").on_press(close).build(k)),
-                ));
-            KitDialog::new("custom", "Custom Field").open(true).fit().width(300.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
-        }
-        Dialog::BestTimes => {
-            let mut body = col().gap(8.0);
-            for (i, l) in [Level::Beginner, Level::Intermediate, Level::Expert].into_iter().enumerate() {
-                let (t, name) = &s.saved.best[i];
-                body = body.child(
-                    row().gap(12.0)
-                        .child(text(format!("{}:", l.name())).font(UI).color(p.muted).w(96.0))
-                        .child(text(format!("{t} seconds")).font(UI_BOLD).color(p.text).w(96.0))
-                        .child(text(name.clone()).font(UI).color(p.text).grow(1.0).min_w(0.0).truncate()),
-                );
-            }
-            body = body.child(buttons(
-                ok("OK").on_press(close).build(k),
-                Some(Button::new("Reset Scores").on_press(|s: &mut App| s.reset_scores()).build(k)),
-            ));
-            KitDialog::new("best", "Fastest Mine Sweepers").open(true).fit().width(400.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
-        }
-        Dialog::Record(li) => {
-            let level = [Level::Beginner, Level::Intermediate, Level::Expert][li];
-            let body = col()
-                .gap(12.0)
-                .child(text(format!("You have the fastest time for {} level. Please type your name.", level.name().to_lowercase())).font(UI).color(p.text).wrap())
-                .child(TextInput::new(&s.edit_name).width(Some(300.0)).on_edit(|s: &mut App| &mut s.edit_name).on_submit(move |s: &mut App, _| s.save_record(li)).build(k))
-                .child(buttons(ok("OK").on_press(move |s: &mut App| s.save_record(li)).build(k), None));
-            KitDialog::new("record", "New Record").open(true).fit().width(340.0).child(body.px(20.0).pb(4.0)).on_close(move |s: &mut App| s.save_record(li)).build(k, layer);
-        }
-        Dialog::About => {
-            let body = col()
-                .gap(8.0)
-                .child(text("Runesweeper 0.1").font(UI_BOLD).color(p.text))
-                .child(text("The Minesweeper you know, drawn and lit on the GPU with Rune.").font(UI).color(p.muted).wrap())
-                .child(text("Open source, MIT licensed.").font(SMALL).color(p.muted))
-                .child(buttons(ok("OK").on_press(close).build(k), None));
-            KitDialog::new("about", "About Runesweeper").open(true).fit().width(340.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
-        }
-        Dialog::HowTo => {
-            let lines = [
-                "Left click opens a square. A number counts the mines touching it.",
-                "Right click flags a mine; again for ?, again to clear (Game ▸ Marks).",
-                "With a number's flags placed, click both buttons (or the middle one) on it to open its other neighbours.",
-                "Open every square without a mine to win. F2 or the face starts again.",
-            ];
-            let mut body = col().gap(8.0);
-            for l in lines {
-                body = body.child(text(l).font(UI).color(p.text).wrap());
-            }
-            body = body.child(buttons(ok("OK").on_press(close).build(k), None));
-            KitDialog::new("howto", "How to Play").open(true).fit().width(380.0).child(body.px(20.0).pb(4.0)).on_close(close).build(k, layer);
-        }
-    }
-}
-
 /// The app icon: a raised console tile with the face over a corner of the field.
 fn icon(p: &Palette) -> El {
     let n = 1024.0;
@@ -328,16 +154,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
         .child(header(s, &p, inner_w))
-        .child(board_el)
-        // Out of the layout, so the console doesn't move when it goes.
-        .children(hint(s, &p).map(|h| {
-            col().key("hint")
-                .absolute(0.0, console_h + 12.0)
-                .w(console_w)
-                .items_center()
-                .child(h)
-                .transition(rune::Transition::opacity().springs(rune_motion::SpringPair::new(rune::Spring::new(0.2, 0.0), rune::Spring::new(0.2, 0.0))))
-        }));
+        .child(board_el);
     if s.moments.won.is_some() {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
@@ -358,9 +175,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let body = col()
         .w_full()
         .h_full()
-        .child(menu_bar(s, &k, &p, &mut layer))
+        .child(toolbar::toolbar(s, &p))
         .child(col().key("stage").grow(1.0).min_h(0.0).center().p_all(MARGIN).child(console));
-    dialogs(s, &k, &p, &mut layer);
+    toolbar::panels(s, &k, &p, &mut layer);
     let base = el()
         .key("root")
         .w_full()
@@ -372,24 +189,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .children(shock)
         .children(cheat);
     rune_kit::root(base, layer)
-}
-
-/// Builds with no right button to lean on (the web, which phones use) show the flag toggle.
-fn touch_first() -> bool {
-    cfg!(target_arch = "wasm32")
-}
-
-/// The first time, a line of how to play under the console, until the first square opens.
-fn hint(s: &App, p: &Palette) -> Option<El> {
-    if s.saved.played || s.icon {
-        return None;
-    }
-    let (a, b) = if touch_first() {
-        ("Tap opens  ·  Flag, then tap, marks a mine", "Tap a number whose flags are placed to open around it")
-    } else {
-        ("Left click opens  ·  Right click flags", "Both buttons on a number open around it")
-    };
-    Some(col().items_center().gap(3.0).child(text(a).font(SMALL).color(p.text.alpha(0.8))).child(text(b).font(SMALL).color(p.muted)))
 }
 
 trait Pad {
