@@ -16,9 +16,9 @@ _Avoid_: Generator, variant, game type
 The Mode that lays mines exactly as Windows XP does, first-click quirks included.
 _Avoid_: OG, original, normal
 
-**Patterns**:
+**Gentle No Guess**:
 The Mode whose fields can always be finished without guessing, using only deductions from one number or two overlapping numbers, plus the mine count near the end.
-_Avoid_: Easy no-guess
+_Avoid_: Patterns, easy no-guess
 
 **No Guess**:
 The Mode whose fields can always be finished without guessing by perfect logic, including the count of mines left.
@@ -36,6 +36,10 @@ A connected area of empty cells and the numbers around it, revealed by a single 
 _Avoid_: Zero, blank area
 
 ## Guessing
+
+**Pattern**:
+A named arrangement of numbers with a known deduction, such as 1-2-1, a hole or a triangle.
+_Avoid_: Formation, trick
 
 **Forced guess**:
 A position where no hidden cell can be proven safe, so the player must risk a cell.
