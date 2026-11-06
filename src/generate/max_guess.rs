@@ -5,10 +5,11 @@
 //! the first click clear) and moves one mine at a time. Each move is scored by walking the
 //! field as a perfect, lucky player ([`play::walk`]): fields the walk finishes beat fields it
 //! stalls on a lopsided guess; among those, more true 50/50s win, then more ground opened.
-//! A move is kept when it scores no worse. Each pair's mine is finally put on a coin flip. The search is anytime: the best finished field
+//! A move is kept when it scores no worse. The search is anytime: the best finished field
 //! after [`budget`] steps is used, and it keeps going past the budget only until it holds one.
-//! Steps, not time, so the field depends only on (dims, seed, first click) (ADR 0001), and a
-//! caller can run the steps in slices.
+//! Each pair's mine then goes to either cell on a coin flip. Steps, not time, so the field
+//! depends only on (dims, seed, first click) (ADR 0001), and a caller can run the steps in
+//! slices.
 
 use super::{Dims, Stream};
 use crate::game::Game;
@@ -41,7 +42,7 @@ pub fn searched(dims: Dims, seed: u64, first: usize, budget: u32) -> MaxGuess {
 
 /// Search steps for a field of `dims`: 2,000 for Beginner, 1,500 for Intermediate, 1,000 for
 /// Expert, and Custom sizes in proportion to their cells between and beyond (300 at least).
-/// Measured with `examples/solver.rs`: more steps keep adding true 50/50s (Expert averages 4.5
+/// Measured with `bench::max_guess` at other budgets: more steps keep adding true 50/50s (Expert averages 4.5
 /// at 300 steps, 9.6 at 1,000, 17 at 2,000), while a step costs more on a bigger field (about
 /// 0.04 ms on Beginner, 0.24 ms on Intermediate, 0.85 ms on Expert, native release). These
 /// keep Expert under a second natively.
@@ -65,7 +66,7 @@ pub struct Search {
     /// Whether each cell may hold a mine (not within the 3×3 around the first click).
     free: Vec<bool>,
     /// The cells that may hold a mine.
-    open_ground: Vec<usize>,
+    allowed: Vec<usize>,
     /// The current field's mines, and whether each cell holds one.
     at: Vec<usize>,
     mine: Vec<bool>,
@@ -84,13 +85,13 @@ impl Search {
         let mut rng = Stream::new(seed);
         let (fx, fy) = ((first % w) as isize, (first / w) as isize);
         let free: Vec<bool> = (0..w * h).map(|i| ((i % w) as isize - fx).abs() > 1 || ((i / w) as isize - fy).abs() > 1).collect();
-        let open_ground: Vec<usize> = (0..w * h).filter(|&i| free[i]).collect();
-        let at = rng.pick(&open_ground, mines.min(open_ground.len()));
+        let allowed: Vec<usize> = (0..w * h).filter(|&i| free[i]).collect();
+        let at = rng.pick(&allowed, mines.min(allowed.len()));
         let mut mine = vec![false; w * h];
         for &i in &at {
             mine[i] = true;
         }
-        let mut s = Search { w, h, first, rng, free, open_ground, at, mine, score: (false, 0, 0), best: None, steps: 0, budget };
+        let mut s = Search { w, h, first, rng, free, allowed, at, mine, score: (false, 0, 0), best: None, steps: 0, budget };
         let walk = s.walk();
         s.score = score(&walk);
         s.keep(walk);
@@ -167,7 +168,7 @@ impl Search {
     /// A mine to move (its index in `at`) and the empty cell it moves to: usually one within
     /// two cells, sometimes anywhere.
     fn propose(&mut self) -> Option<(usize, usize)> {
-        if self.at.is_empty() || self.at.len() == self.open_ground.len() {
+        if self.at.is_empty() || self.at.len() == self.allowed.len() {
             return None;
         }
         let k = self.rng.below(self.at.len());
@@ -185,7 +186,7 @@ impl Search {
             }
         }
         loop {
-            let to = self.open_ground[self.rng.below(self.open_ground.len())];
+            let to = self.allowed[self.rng.below(self.allowed.len())];
             if !self.mine[to] {
                 return Some((k, to));
             }
