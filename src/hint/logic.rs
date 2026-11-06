@@ -492,7 +492,9 @@ fn read_order(steps: &[Step], all: &[usize]) -> Vec<usize> {
 pub(super) fn explain(v: &View, s: &Settles) -> (Technique, Vec<usize>, Vec<Step>) {
     let all = s.numbers();
     if let Some(count) = s.count {
-        return (Technique::Count, all, counted(s, count));
+        let steps = counted(s, count);
+        let technique = if matches!(steps.first(), Some(Step::Suppose { .. })) { Technique::Combinations } else { Technique::Count };
+        return (technique, all, steps);
     }
     let mut facts = HashMap::new();
     let (units, _) = derive(v, &s.cons, &mut facts, s.cell);
