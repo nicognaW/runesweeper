@@ -11,12 +11,19 @@
 //! [`Step`]s, so later techniques (named patterns, guesses) add steps and techniques rather
 //! than new shapes.
 //!
+//! Deductions are named from the pattern catalogue in [`patterns`] (minesweeper.online's
+//! patterns and the Chinese 定式) when their shape matches one; a named pattern is preferred to
+//! plain logic on as many numbers.
+//!
 //! Any cell perfect logic proves gets a hint: deductions from more than two numbers, and from
 //! the count of mines left, come from [`logic`], which finds the fewest numbers that prove the
 //! cell and explains them one line per step.
 
 mod logic;
+mod patterns;
 pub mod words;
+
+pub use patterns::Pattern;
 
 use crate::game::{Cover, Game};
 use crate::solver::{Constraint, Fact, View, constraints};
@@ -30,28 +37,23 @@ pub enum Technique {
     Single,
     /// A number whose mines are all proven by other numbers: its other cells are safe.
     Satisfied,
-    /// Two numbers sharing hidden cells.
+    /// A named pattern: two numbers sharing hidden cells, or a named shape of more.
     Pattern(Pattern),
-    /// Mines proven by single numbers subtracted from two numbers, which then form a pattern.
+    /// Mines proven by single numbers subtracted from two numbers, which then form a pattern
+    /// (named for it, or by its Chinese name); also two numbers touching such mines, named as
+    /// the reduction a player who flagged them sees.
     Reduction(Pattern),
     /// Any number of numbers, one or two at a time, each step settling cells for the next.
     Chain,
     /// Supposing the cell were the other way, a number breaks.
     Suppose,
-    /// The count of mines left, with the numbers.
+    /// The count of mines left, with the numbers (mine counting).
     Count,
+    /// Supposing the cell were the other way, the mines left could not all fit
+    /// (combinations).
+    Combinations,
     /// Nothing perfect logic proves.
     Nothing,
-}
-
-/// The two-number patterns everything else is built from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Pattern {
-    /// One number's hidden cells all touch the other, which needs no more: the rest are safe.
-    OneOne,
-    /// The difference of two numbers: the larger one's own cells are mines, or the smaller
-    /// one's own cells are safe.
-    OneTwo,
 }
 
 /// How hard a technique is to see, on minesweeper.online's No Guess scale.
@@ -72,9 +74,9 @@ impl Technique {
     pub fn grade(self) -> Option<Grade> {
         match self {
             Technique::Single | Technique::Satisfied => Some(Grade::Easy),
-            Technique::Pattern(_) => Some(Grade::Medium),
-            Technique::Reduction(_) | Technique::Chain | Technique::Count => Some(Grade::Hard),
-            Technique::Suppose => Some(Grade::Evil),
+            Technique::Pattern(p) => Some(p.grade()),
+            Technique::Reduction(_) | Technique::Chain => Some(Grade::Hard),
+            Technique::Suppose | Technique::Count | Technique::Combinations => Some(Grade::Evil),
             Technique::WrongFlag | Technique::Nothing => None,
         }
     }
@@ -143,6 +145,10 @@ pub enum Step {
     /// With what the lines above settle, the number still needs `need` mines among its
     /// `cells` left: all mines (`need` is their count), or all safe (`need` is 0).
     Now { at: usize, n: u8, need: usize, cells: Vec<usize>, mine: bool },
+    /// The shared cells must hold all `need` of the number's mines left (`most`: as many as
+    /// they can), or no more than it needs (as few as they must): each group holds exactly
+    /// its bound.
+    Split { at: usize, n: u8, need: usize, most: bool },
     /// Suppose the cell were a mine (or safe)...
     Suppose { cell: usize, mine: bool },
     /// ...then this number would have too many mines (`over`), or too few.
@@ -225,7 +231,8 @@ pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
             (_, true) => Verdict::Mine,
             (false, false) => Verdict::Safe,
         };
-        let shell = Hint { technique: Technique::Chain, numbers: s.numbers(), target: Some(Target { cell: s.cell, verdict }), steps: Vec::new() };
+        let technique = patterns::many(v, &s.cons).map_or(Technique::Chain, Technique::Pattern);
+        let shell = Hint { technique, numbers: s.numbers(), target: Some(Target { cell: s.cell, verdict }), steps: Vec::new() };
         if verdict == Verdict::WrongFlag { &mut wrong } else { &mut right }.push((shell, Some(k)));
     }
     if wrong.is_empty() {
@@ -241,16 +248,29 @@ pub fn find(v: &View, flags: &[bool], last: Option<usize>) -> Hint {
         None => Hint::nothing(),
         Some((h, None)) => h,
         Some((h, Some(k))) => {
-            let (technique, numbers, mut steps) = logic::explain(v, &more[k]);
+            let (technique, numbers, mut steps) = match h.technique {
+                Technique::Pattern(p) => patterns::hub(v, p, &more[k].cons, more[k].cell, more[k].mine).map(|(numbers, steps)| (h.technique, numbers, steps)),
+                _ => None,
+            }
+            .unwrap_or_else(|| logic::explain(v, &more[k]));
             let target = h.target.expect("a cell");
             if target.verdict == Verdict::WrongFlag {
                 steps.push(Step::FlagWrong { cell: target.cell });
                 return Hint { technique: Technique::WrongFlag, numbers, target: Some(target), steps };
             }
+            let technique = match (h.technique, technique) {
+                (named @ Technique::Pattern(_), _) => named,
+                (_, Technique::Chain | Technique::Suppose) if numbers.len() >= DEPENDENCY_CHAIN => Technique::Pattern(Pattern::DependencyChain),
+                (_, t) => t,
+            };
             Hint { technique, numbers, target: Some(target), steps }
         }
     }
 }
+
+/// A deduction reading this many numbers or more, one or two at a time or by supposing, is a
+/// dependency chain.
+const DEPENDENCY_CHAIN: usize = 5;
 
 /// The hints the deductions `found` give, as (wrong flags, the rest). A flag on a proven
 /// mine needs no hint.
@@ -402,10 +422,23 @@ fn pair_one(v: &View, a: &Constraint, b: &Constraint) -> Option<(Pattern, Vec<us
 }
 
 fn pairs(v: &View, cs: &[Constraint], out: &mut Vec<Found>) {
+    let proven = mines_of(&cs.iter().filter(|c| full(c)).collect::<Vec<_>>());
     for (x, y) in overlapping(cs) {
         for (a, b) in [(&cs[x], &cs[y]), (&cs[y], &cs[x])] {
             if let Some((p, cells, mine, steps)) = pair_one(v, a, b) {
-                out.push(Found { technique: Technique::Pattern(p), numbers: vec![a.at, b.at], cells, mine, steps: steps.into() });
+                // Numbers touching proven mines are named as the reduction a player sees once
+                // those are flagged, though they need no subtracting here.
+                let both: Vec<usize> = a.cells.iter().chain(&b.cells).copied().collect();
+                let known: Vec<usize> = proven.iter().copied().filter(|m| both.contains(m)).collect();
+                let technique = match patterns::reduced(v, cs, &known, a, b) {
+                    Some(r) => Technique::Reduction(r),
+                    None => match patterns::pair(v, cs, &proven, a, b, p == Pattern::OneOne, mine) {
+                        // A row the Chinese name for the proven mine beside it.
+                        r @ Pattern::NextToMineTwoTwoOne => Technique::Reduction(r),
+                        r => Technique::Pattern(r),
+                    },
+                };
+                out.push(Found { technique, numbers: vec![a.at, b.at], cells, mine, steps: steps.into() });
             }
         }
     }
@@ -441,6 +474,9 @@ fn reductions(v: &View, cs: &[Constraint], out: &mut Vec<Found>) {
                 }
                 let Some(sub) = smallest(&ps, |s| with(s).is_some_and(|((_, c, m, _), _, _)| m == mine && c.contains(&cell))) else { continue };
                 let ((pattern, cells, mine, two), ka, kb) = with(&sub).expect("found above");
+                // Named for every proven mine the two touch, as a player who flagged them sees it.
+                let k: Vec<usize> = mines_of(&ps).into_iter().filter(|m| both.contains(m)).collect();
+                let pattern = patterns::reduced(v, cs, &k, a, b).unwrap_or(pattern);
                 let mut steps = prover_steps(v, &sub);
                 for (c, k) in [(a, ka), (b, kb)] {
                     if k > 0 {

@@ -6,6 +6,8 @@
 use super::*;
 use crate::strings::Lang;
 
+mod catalogue;
+
 struct Pos {
     v: View,
     flags: Vec<bool>,
@@ -84,7 +86,7 @@ fn one_one_from_a_wall() {
     //   1 1 1 1 1
     let p = pos(&["*##*#", "....."]);
     let h = p.hint(Some((0, 1)));
-    assert_eq!(h.technique, Technique::Pattern(Pattern::OneOne));
+    assert_eq!(h.technique, Technique::Pattern(Pattern::EdgeOneOne));
     assert_eq!(h.grade(), Some(Grade::Medium));
     assert_eq!(target(&h), (p.at(2, 0), Verdict::Safe));
     assert_eq!(h.numbers, vec![p.at(0, 1), p.at(1, 1)]);
@@ -109,9 +111,10 @@ fn one_one_from_a_wall() {
 fn one_two_puts_the_difference_in_the_larger_numbers_own_cells() {
     //   * # *
     //   1 2 1
+    //   (a 1-2 inside a 1-2-1, which names it)
     let p = pos(&["*#*", "..."]);
     let h = p.hint(None);
-    assert_eq!(h.technique, Technique::Pattern(Pattern::OneTwo));
+    assert_eq!(h.technique, Technique::Pattern(Pattern::OneTwoOne));
     assert_eq!(target(&h), (p.at(0, 0), Verdict::Mine));
     assert_eq!(h.numbers, vec![p.at(2, 1), p.at(1, 1)]);
     assert_eq!(
@@ -337,7 +340,7 @@ fn every_hint_on_real_fields_uses_the_fewest_numbers_and_logic_never_goes_unname
                 };
                 let mine = t.verdict == Verdict::Mine;
                 assert_eq!(g.cells[t.cell].mine, mine, "{h:?}");
-                let count = h.technique == Technique::Count;
+                let count = matches!(h.technique, Technique::Count | Technique::Combinations);
                 let known: Vec<usize> = if count { (0..v.len()).filter(|&i| flags[i]).collect() } else { Vec::new() };
                 if let Some(ok) = forces(&v, &h.numbers, &known, count, t.cell, mine) {
                     assert!(ok, "its numbers prove it: {h:?}");
@@ -424,7 +427,7 @@ fn the_mine_count_settles_the_cells_no_number_needs() {
     let p = pos(&["#.#.#", "##*.*"]);
     let h = p.hint(None);
     assert_eq!(h.technique, Technique::Count);
-    assert_eq!(h.grade(), Some(Grade::Hard));
+    assert_eq!(h.grade(), Some(Grade::Evil), "mine counting is an Evil pattern on minesweeper.online");
     assert_eq!(target(&h), (p.at(0, 0), Verdict::Safe));
     assert_eq!(h.numbers, vec![p.at(3, 0)]);
     assert_eq!(en(&h), ["Only 2 mines left to find, and this number needs that many, so every other hidden cell is safe."]);
@@ -439,7 +442,7 @@ fn the_mine_count_rules_out_a_cell_that_would_leave_too_few() {
     //                 leaving room for only 2 of the 3 mines.
     let p = pos(&["*#.##.", "#..**."]);
     let h = p.hint(None);
-    assert_eq!(h.technique, Technique::Count);
+    assert_eq!(h.technique, Technique::Combinations, "a supposition the mine count breaks");
     assert_eq!(target(&h), (p.at(1, 0), Verdict::Safe));
     assert_eq!(h.numbers, vec![p.at(2, 0), p.at(5, 0), p.at(1, 1)]);
     assert_eq!(

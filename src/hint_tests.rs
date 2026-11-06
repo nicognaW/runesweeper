@@ -56,7 +56,7 @@ fn the_h_key_and_the_button_step_through_four_stages() {
     assert!(!shown(&rt, "hint-callout"));
     hint_key(&mut rt);
     assert_eq!(stage(&rt), 1);
-    assert!(text_in(&rt, "hint-callout").contains("1-1 pattern"), "the nudge names the technique: {}", text_in(&rt, "hint-callout"));
+    assert!(text_in(&rt, "hint-callout").contains("1-1 at the edge"), "the nudge names the technique: {}", text_in(&rt, "hint-callout"));
     assert!(text_in(&rt, "hint-callout").contains("Medium"), "and its grade");
     assert!(!shown(&rt, "hint-n9") && !shown(&rt, "hint-cell"), "nothing on the field yet");
 

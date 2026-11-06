@@ -21,16 +21,76 @@ pub fn name(t: Technique, lang: Lang) -> &'static str {
         Technique::WrongFlag => S::TechWrongFlag,
         Technique::Single => S::TechSingle,
         Technique::Satisfied => S::TechSatisfied,
-        Technique::Pattern(Pattern::OneOne) => S::TechOneOne,
-        Technique::Pattern(Pattern::OneTwo) => S::TechOneTwo,
-        Technique::Reduction(Pattern::OneOne) => S::TechReductionOneOne,
-        Technique::Reduction(Pattern::OneTwo) => S::TechReductionOneTwo,
+        Technique::Pattern(p) => pattern(p),
+        Technique::Reduction(p) => reduction(p),
         Technique::Chain => S::TechChain,
         Technique::Suppose => S::TechSuppose,
         Technique::Count => S::TechCount,
+        Technique::Combinations => S::TechCombinations,
         Technique::Nothing => S::TechNothing,
     }
     .get(lang)
+}
+
+/// A named pattern's name (zh-CN: as listed in `src/zh_cn_terms.md`).
+fn pattern(p: Pattern) -> S {
+    match p {
+        Pattern::OneOne => S::TechOneOne,
+        Pattern::EdgeOneOne => S::TechEdgeOneOne,
+        Pattern::OneOnePlus => S::TechOneOnePlus,
+        Pattern::OneTwo => S::TechOneTwo,
+        Pattern::OneTwoPlus => S::TechOneTwoPlus,
+        Pattern::OneTwoC => S::TechOneTwoC,
+        Pattern::OneTwoCPlus => S::TechOneTwoCPlus,
+        Pattern::OneTwoOne => S::TechOneTwoOne,
+        Pattern::OneTwoTwoOne => S::TechOneTwoTwoOne,
+        Pattern::TwoOneTwo => S::TechTwoOneTwo,
+        Pattern::EdgeTwoOneOne => S::TechEdgeTwoOneOne,
+        Pattern::TwoTwoBetweenMines => S::TechTwoTwoBetweenMines,
+        Pattern::NextToMineTwoTwoOne => S::TechNextToMineTwoTwoOne,
+        Pattern::NextToMineThreeOne => S::TechNextToMineThreeOne,
+        Pattern::NextToMineFourOne => S::TechNextToMineFourOne,
+        Pattern::Hole1 => S::TechHole1,
+        Pattern::Hole2 => S::TechHole2,
+        Pattern::Hole3 => S::TechHole3,
+        Pattern::Triangle1 => S::TechTriangle1,
+        Pattern::Triangle2 => S::TechTriangle2,
+        Pattern::Triangle3 => S::TechTriangle3,
+        Pattern::Triangle4 => S::TechTriangle4,
+        Pattern::Triangle5 => S::TechTriangle5,
+        Pattern::Corner131 => S::TechCorner131,
+        Pattern::Corner222 => S::TechCorner222,
+        Pattern::Staggered121 => S::TechStaggered121,
+        Pattern::TPattern => S::TechTPattern,
+        Pattern::DependencyChain => S::TechDependencyChain,
+    }
+}
+
+/// A reduction, by the pattern it leads to, or by its Chinese name.
+fn reduction(p: Pattern) -> S {
+    match p {
+        Pattern::OneOne => S::TechReductionOneOne,
+        Pattern::OneTwoOne => S::TechReductionOneTwoOne,
+        Pattern::TwoTwoBetweenMines | Pattern::NextToMineTwoTwoOne | Pattern::NextToMineThreeOne | Pattern::NextToMineFourOne => pattern(p),
+        _ => S::TechReductionOneTwo,
+    }
+}
+
+/// What to look for, for a named pattern.
+fn look_for(p: Pattern) -> S {
+    use Pattern::*;
+    match p {
+        OneOne | EdgeOneOne | OneOnePlus => S::NudgeOneOne,
+        OneTwo | OneTwoPlus | OneTwoC | OneTwoCPlus => S::NudgeOneTwo,
+        OneTwoOne | OneTwoTwoOne | TwoOneTwo | EdgeTwoOneOne => S::NudgeRow,
+        TwoTwoBetweenMines | NextToMineTwoTwoOne | NextToMineThreeOne | NextToMineFourOne => S::NudgeReduction,
+        Hole1 | Hole2 | Hole3 => S::NudgeHole,
+        Triangle1 | Triangle2 | Triangle3 | Triangle4 | Triangle5 => S::NudgeTriangle,
+        Corner131 | Corner222 => S::NudgeCorner,
+        Staggered121 => S::NudgeStaggered,
+        TPattern => S::NudgeTPattern,
+        DependencyChain => S::NudgeDependencyChain,
+    }
 }
 
 pub fn grade(g: Grade, lang: Lang) -> &'static str {
@@ -49,12 +109,12 @@ pub fn nudge(h: &Hint, lang: Lang) -> &'static str {
         Technique::WrongFlag => S::NudgeWrongFlag,
         Technique::Single => S::NudgeSingle,
         Technique::Satisfied => S::NudgeSatisfied,
-        Technique::Pattern(Pattern::OneOne) => S::NudgeOneOne,
-        Technique::Pattern(Pattern::OneTwo) => S::NudgeOneTwo,
+        Technique::Pattern(p) => look_for(p),
         Technique::Reduction(_) => S::NudgeReduction,
         Technique::Chain => S::NudgeChain,
         Technique::Suppose => S::NudgeSuppose,
         Technique::Count => S::NudgeCount,
+        Technique::Combinations => S::NudgeCombinations,
         Technique::Nothing => S::NudgeNothing,
     }
     .get(lang)
@@ -103,6 +163,7 @@ fn step(s: &Step, last: bool, lang: Lang) -> String {
         Step::FlagWrong { .. } => S::StepFlagWrong.get(lang).to_string(),
         Step::Now { n, need, ref cells, mine: true, .. } => (if last { S::StepNowMine } else if cells.len() == 1 { S::StepNowMine1 } else { S::StepNowMines }).fill(lang, &[&n, &mines(lang, need), &self::cells(lang, cells.len())]),
         Step::Now { n, mine: false, .. } => (if last { S::StepNowSafe } else { S::StepNowSafes }).fill(lang, &[&n, &mines(lang, n as usize)]),
+        Step::Split { n, need, most, .. } => if most { S::StepSplitMost } else { S::StepSplitLeast }.fill(lang, &[&n, &mines(lang, need)]),
         Step::Suppose { mine, .. } => if mine { S::StepSupposeMine } else { S::StepSupposeSafe }.get(lang).to_string(),
         Step::Broken { n, over, .. } => if over { S::StepBrokenOver } else { S::StepBrokenUnder }.fill(lang, &[&n]),
         Step::NoRoom { count } => if count { S::StepNoRoomCount } else { S::StepNoRoom }.get(lang).to_string(),
