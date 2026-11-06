@@ -10,15 +10,20 @@ pub struct Played {
     pub guesses: u32,
 }
 
-/// Plays `game` from a first click on `first` until it is won or lost.
+/// Plays `game` from a first click on `first` until it is won or lost, with perfect logic.
 pub fn play(game: &mut Game, first: usize) -> Played {
+    play_at(game, first, Strength::Full)
+}
+
+/// [`play`], proving cells only as far as `strength` allows before it guesses.
+pub fn play_at(game: &mut Game, first: usize, strength: Strength) -> Played {
     let n = game.w * game.h;
     let mut facts = vec![Fact::Unknown; n];
     let mut guesses = 0;
     game.open(first);
     while game.status == Status::Playing {
         let v = View::of(game);
-        let proofs = deduce(&v, &facts, Strength::Full);
+        let proofs = deduce(&v, &facts, strength);
         if !proofs.is_empty() {
             for p in proofs {
                 if p.mine {

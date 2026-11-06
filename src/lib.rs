@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod board;
+pub mod fonts;
 pub mod game;
 pub mod generate;
 pub mod gfx;
@@ -207,6 +208,8 @@ pub fn spec() -> AppSpec<App> {
         min_size: Some((300.0, 300.0)),
         poll: Some(|s, t, tx| s.tick(t, tx)),
         on_key: Some(|s, e, tx| s.key(e, tx)),
+        fonts: fonts::LIST,
+        families: fonts::FAMILIES,
         ..AppSpec::new("Runesweeper", initial_size(), init, ui::view)
     }
 }

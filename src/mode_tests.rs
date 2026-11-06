@@ -150,3 +150,33 @@ fn flags_before_the_first_click_stay_and_the_counter_is_mines_less_flags() {
     assert_eq!(a.game.cells[corner].cover, Cover::Flag, "the flag stays");
     assert_eq!(a.game.counter(), 9);
 }
+
+#[test]
+fn gentle_no_guess_sits_between_classic_and_no_guess_and_is_saved_and_shown() {
+    let mut rt = runtime(Saved::default());
+    click(&mut rt, "level-chip");
+    settle(&mut rt);
+    let x = |rt: &rune::Runtime<App>, k: &str| rt.find(k).unwrap_or_else(|| panic!("no {k}")).0;
+    let (classic, gentle, full) = (x(&rt, "mode-classic"), x(&rt, "mode-gentle-no-guess"), x(&rt, "mode-no-guess"));
+    assert!(classic < gentle && gentle < full, "Classic, Gentle No Guess, No Guess: {classic} {gentle} {full}");
+    assert_eq!(text_in(&rt, "modes"), "Classic Gentle No Guess No Guess");
+    click(&mut rt, "mode-gentle-no-guess");
+    settle(&mut rt);
+    assert_eq!(rt.state.mode, Mode::GentleNoGuess);
+    assert_eq!(mines(&rt.state), 0, "no mines until the first click");
+    assert_eq!(text_in(&rt, "level-chip"), "Gentle No Guess Beginner");
+    let rt = runtime(Saved::parse(&rt.state.saved.write()));
+    assert_eq!(rt.state.mode, Mode::GentleNoGuess, "the choice survives a restart");
+    let rt = runtime(Saved { lang: Some(Lang::ZhCn), mode: Mode::GentleNoGuess, ..Saved::default() });
+    assert_eq!(text_in(&rt, "level-chip"), "简单无猜 初级");
+}
+
+#[test]
+fn a_gentle_first_click_lays_the_field_its_seed_names_and_opens_an_area() {
+    let mut a = App::with(Saved { mode: Mode::GentleNoGuess, ..Saved::default() }, 3);
+    let (i, seed) = (middle(&a), a.seed);
+    a.open_at(i);
+    let want = generate::lay(Mode::GentleNoGuess, a.dims(), seed, i);
+    assert_eq!(a.game.cells.iter().map(|c| c.mine).collect::<Vec<_>>(), want.cells.iter().map(|c| c.mine).collect::<Vec<_>>());
+    assert!(a.game.opened > 1, "the first click opens an area");
+}
