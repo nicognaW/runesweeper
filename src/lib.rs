@@ -83,10 +83,6 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         *a = scene(Level::Beginner, 7);
         a.dialog = Some(app::Dialog::BestTimes);
     }),
-    ("boot", |a| {
-        *a = scene(Level::Intermediate, 11);
-        a.power_on();
-    }),
     ("first-run", |a| {
         *a = scene(Level::Beginner, 7);
         a.saved.played = false;
@@ -99,6 +95,70 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         *a = scene(Level::Intermediate, 11);
         a.saved.color = false;
         play(a, &[(8, 8)]);
+    }),
+    // States for checking every screen by eye.
+    ("help-menu", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.menu = Some(app::Menu::Help);
+    }),
+    ("record", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.edit_name = rune::TextEdit::new("Anonymous");
+        a.dialog = Some(app::Dialog::Record(0));
+    }),
+    ("about", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.dialog = Some(app::Dialog::About);
+    }),
+    ("howto", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.dialog = Some(app::Dialog::HowTo);
+    }),
+    ("press", |a| {
+        *a = scene(Level::Intermediate, 11);
+        play(a, &[(8, 8)]);
+        let i = (0..a.game.cells.len()).find(|&i| a.game.cells[i].cover == game::Cover::Hidden && a.game.neighbours(i).all(|j| a.game.cells[j].cover == game::Cover::Hidden)).unwrap();
+        a.press = app::Press { left: true, cell: Some(i), ..Default::default() };
+    }),
+    ("chord", |a| {
+        *a = scene(Level::Intermediate, 11);
+        play(a, &[(8, 8)]);
+        let i = (0..a.game.cells.len()).find(|&i| a.game.cells[i].cover == game::Cover::Open && a.game.cells[i].adj > 0).unwrap();
+        a.press = app::Press { middle: true, cell: Some(i), ..Default::default() };
+    }),
+    ("marks", |a| {
+        *a = scene(Level::Intermediate, 11);
+        play(a, &[(8, 8)]);
+        let hidden: Vec<usize> = (0..a.game.cells.len()).filter(|&i| a.game.cells[i].cover == game::Cover::Hidden).collect();
+        for &i in hidden.iter().take(48).step_by(3) {
+            a.game.mark(i, true);
+        }
+        for &i in hidden.iter().skip(1).take(30).step_by(5) {
+            a.game.mark(i, true);
+            a.game.mark(i, true);
+        }
+    }),
+    ("over-flagged", |a| {
+        *a = scene(Level::Beginner, 7);
+        play(a, &[(4, 4)]);
+        let hidden: Vec<usize> = (0..a.game.cells.len()).filter(|&i| a.game.cells[i].cover == game::Cover::Hidden).collect();
+        for &i in hidden.iter().take(23) {
+            a.game.mark(i, false);
+        }
+        a.seconds = 999;
+    }),
+    ("mono-lost", |a| {
+        SCENES.iter().find(|s| s.0 == "lost").unwrap().1(a);
+        a.saved.color = false;
+    }),
+    ("mono-won", |a| {
+        SCENES.iter().find(|s| s.0 == "won").unwrap().1(a);
+        a.saved.color = false;
+    }),
+    ("custom-max", |a| {
+        let saved = Saved { level: Level::Custom, custom: (30, 24, 667), played: true, ..Saved::default() };
+        *a = App::with(saved, 3);
+        play(a, &[(0, 0), (29, 23)]);
     }),
 ];
 

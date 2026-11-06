@@ -74,14 +74,14 @@ pub struct App {
     pub cheat: bool,
     /// Touch screens have no right button: while on, a tap flags (a tap on a number chords).
     pub flag_mode: bool,
-    /// The power-on scan that sweeps the field once at launch (None after the first field).
-    pub boot: Option<rune::Tween<[f32; 4]>>,
     /// Whether this field deals its tiles in (not when a key asked for it).
     pub deal: bool,
     /// The last win beat the level's best time.
     pub new_best: bool,
     /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
     pub banner_done: bool,
+    /// The shockwave has run; its full-window backdrop copy can go.
+    pub shock_done: bool,
     /// Draw the app icon instead of the game (the `icon` scene).
     pub icon: bool,
     pub edit_w: TextEdit,
@@ -93,15 +93,7 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let saved = storage::load();
-        let mut a = Self::with(saved, storage::seed());
-        a.power_on();
-        a
-    }
-
-    /// The launch sweep: a scan line runs down the field once, waking each row as it passes.
-    pub fn power_on(&mut self) {
-        let (bw, bh) = crate::board::size(self);
-        self.boot = Some(rune::Tween::linear([0.0, 0.0, bw, 2.0], [0.0, bh - 2.0, bw, 2.0], Duration::from_secs_f64(crate::board::BOOT)));
+        Self::with(saved, storage::seed())
     }
 
     pub fn with(saved: Saved, seed: u64) -> App {
@@ -128,10 +120,10 @@ impl App {
             cheat: false,
             icon: false,
             deal: true,
-            boot: None,
             flag_mode: false,
             new_best: false,
             banner_done: false,
+            shock_done: false,
             edit_w: TextEdit::new(""),
             edit_h: TextEdit::new(""),
             edit_m: TextEdit::new(""),
@@ -155,7 +147,6 @@ impl App {
     }
 
     fn fresh_field(&mut self) {
-        self.boot = None;
         let (w, h, m) = self.dims();
         self.game = Game::new(w, h, m, storage::seed() ^ self.field as u64);
         self.field += 1;
@@ -164,6 +155,7 @@ impl App {
         self.press = Press::default();
         self.new_best = false;
         self.banner_done = false;
+        self.shock_done = false;
         self.moments = Moments::default();
     }
 
@@ -362,6 +354,13 @@ impl App {
 
     pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.now = now;
+        if let Some((t, _)) = self.moments.boom.filter(|_| !self.shock_done) {
+            if now - t >= crate::gfx::SHOCK_FOR {
+                self.shock_done = true;
+                return true;
+            }
+            tx.wake_after(Duration::from_secs_f64((t + crate::gfx::SHOCK_FOR - now).max(0.01)));
+        }
         let ended = self.moments.won.or(self.moments.boom.map(|(t, _)| t));
         if let Some(t) = ended.filter(|_| !self.banner_done) {
             if now - t >= Self::BANNER_FOR {

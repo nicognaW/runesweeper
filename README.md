@@ -1,14 +1,12 @@
 # Runesweeper
 
-Minesweeper with the rules, menus and quirks of the Windows classic, built as an alien
-instrument on the GPU with [Rune](https://github.com/anomalyco/rune): smoked-glass cells lit at
-the edge, cyan phosphor readouts, an alien at the controls, an iridescent alloy shell, and
-shockwaves when it goes wrong.
+Minesweeper with the rules, menus and quirks of the Windows classic, drawn on the GPU with
+[Rune](https://github.com/anomalyco/rune): springs, ripples, liquid-metal chrome, plastic, fire
+and shockwaves.
 
 <p align="center">
-  <img src="docs/boot.gif" alt="Powering on" width="378">
   <img src="docs/play.gif" alt="Opening a field" width="330">
-  <img src="docs/boom.gif" alt="A containment breach" width="378">
+  <img src="docs/boom.gif" alt="Stepping on a mine" width="378">
 </p>
 
 <p align="center">
@@ -33,17 +31,13 @@ that couldn't were cut.
   over at most 300 ms. Numbers are there at once; nothing makes you wait to read them. The
   selector sits on the square under the pointer, with no glide to lag behind it.
 - **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2) never animate.
-- **At launch**, once: a scan line sweeps the field and each row of cells wakes as it passes,
-  then the readouts strike up like tubes (0.7 s, and you can play through it).
 - **A new field** from the face or the menu deals in from the centre in under half a second;
   from F2 it's simply there, old field gone in the same frame.
-- **A loss** (containment breach): one shockwave through the window and the other mines going
-  off in a 300 ms chain out from the one you hit, then still.
+- **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
+  out from the one you hit, then still.
 - **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
   field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
 - The result banner straddles the field's edge, says how it went, and leaves after 3 s.
-- **Still, but alive**: the targeting reticle snaps to the square under the pointer, each sealed
-  cell shows a faint status pip, and a hex lattice glows behind the console. None of it moves.
 - Shaders do the backdrop, the liquid-metal rim, the plastic face, the LED glow, the blasts and
   the glow, and hold still when nothing is happening: an idle window draws nothing.
 - Entrances and exits use a strong ease-out; nothing grows from nothing. With Reduce Motion on,
@@ -54,15 +48,17 @@ Motion is checked with Rune's motion gate (pops, jumps, snaps, overshoot that wa
 
 ```sh
 RUNE_MOTION_GATE=gate.txt runesweeper --scene beginner --script scripts/play.json --duration 4.5 --out frames
-RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: won, first-run, boot
+RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: keys.json, won, first-run
 ```
 
-Every scenario reports nothing except `scripts/keys.json`, where F2's one-frame swap shows up as
-the old field's tiles leaving unanimated: a deliberate cut for a keyboard action.
+Every scenario reports nothing except the scripts that press F2 (`play.json`, `keys.json`), where
+the one-frame swap shows up as the old field's tiles leaving unanimated: a deliberate cut for a
+keyboard action.
 
 Frame cost stays small: `cargo run --release --example bench` times Rune's work per frame on
-Expert (view, diff, layout, draw lists) at under 1 ms median, 1.4 ms p95, while a press is dragged
-across the field. Nothing redraws at rest.
+Expert (view, diff, layout, draw lists) at 0.4 ms median and 0.7 ms p95, even while a press is
+dragged across the field. Nothing redraws at rest, and the shockwave's full-window backdrop copy
+exists only for its 0.6 s.
 
 ## Download
 
