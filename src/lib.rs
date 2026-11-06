@@ -2,12 +2,15 @@
 
 pub mod app;
 pub mod board;
+pub mod fonts;
 pub mod game;
 pub mod generate;
 pub mod generating;
 pub mod gfx;
+pub mod history;
 pub mod icons;
 pub mod locale;
+pub mod record;
 pub mod solver;
 pub mod storage;
 pub mod strings;
@@ -23,6 +26,8 @@ mod lang_tests;
 mod generate_tests;
 #[cfg(test)]
 mod mode_tests;
+#[cfg(test)]
+mod record_tests;
 #[cfg(test)]
 mod generating_tests;
 
@@ -110,6 +115,30 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         play(a, &[(4, 4)]);
         a.toggle_panel(app::Panel::Picker);
     }),
+    ("history", |a| {
+        *a = scene(Level::Beginner, 7);
+        let rec = |minutes: u64, end, seconds, forced, survived| record::Record {
+            at: 1_793_000_000_000 + minutes * 60_000,
+            end,
+            seconds,
+            three_bv: 31,
+            three_bv_solved: if end == record::End::Won { 31 } else { 17 },
+            left: 38,
+            right: 9,
+            chords: 4,
+            forced,
+            survived,
+            ..record::Record::new(game::Mode::Classic, (9, 9, 10))
+        };
+        a.history = vec![
+            rec(0, record::End::Won, 41, 1, 1),
+            rec(9, record::End::Lost, 12, 2, 1),
+            rec(15, record::End::Won, 33, 0, 0),
+            rec(20, record::End::Abandoned, 7, 0, 0),
+            rec(31, record::End::Won, 38, 1, 1),
+        ];
+        a.toggle_panel(app::Panel::History);
+    }),
     ("settings", |a| {
         *a = scene(Level::Beginner, 7);
         a.toggle_panel(app::Panel::Settings);
@@ -195,6 +224,8 @@ pub fn spec() -> AppSpec<App> {
         setup: Some(|s, waker| s.waker = Some(waker)),
         poll: Some(|s, t, tx| s.tick(t, tx)),
         on_key: Some(|s, e, tx| s.key(e, tx)),
+        fonts: fonts::LIST,
+        families: fonts::FAMILIES,
         ..AppSpec::new("Runesweeper", initial_size(), init, ui::view)
     }
 }

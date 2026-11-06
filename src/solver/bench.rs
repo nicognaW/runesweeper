@@ -1,5 +1,5 @@
-//! The solver benchmark: seeded Classic games played by the bot, seeded No Guess fields
-//! generated, and the numbers that describe how each went.
+//! The solver benchmark: seeded Classic games played by the bot, seeded Gentle No Guess and
+//! No Guess fields generated, and the numbers that describe how each went.
 //!
 //! Classic's rule: Classic fields laid from the MSVC `rand()` stream seeded once with `seed`, one
 //! field after another as the game deals them; the first click on the top-left cell, with
@@ -11,7 +11,7 @@ use std::time::Duration;
 // The browser's clock on the web, so the benchmark runs there too.
 use rune::time::Instant;
 
-use super::play;
+use super::{Strength, play};
 use crate::game::{Game, Mode, Rng};
 use crate::generate::{self, Stream};
 
@@ -96,17 +96,24 @@ impl Generation {
 /// Generates `fields` No Guess fields of `(columns, rows, mines)`: each one's seed and first
 /// click drawn in turn from `seed`, the click anywhere on the field. Each field is then played
 /// by the bot, to check it is won with no guess.
-pub fn no_guess((w, h, mines): (usize, usize, usize), fields: u64, seed: u64) -> Generation {
+pub fn no_guess(dims: (usize, usize, usize), fields: u64, seed: u64) -> Generation {
+    generation(Mode::NoGuess, dims, fields, seed)
+}
+
+/// [`no_guess`] for any Mode laid on the first click. The bot checks each field at the
+/// strength the Mode promises: Gentle for Gentle No Guess, perfect logic otherwise.
+pub fn generation(mode: Mode, (w, h, mines): (usize, usize, usize), fields: u64, seed: u64) -> Generation {
+    let strength = if mode == Mode::GentleNoGuess { Strength::Gentle } else { Strength::Full };
     let mut t = Generation::default();
     let mut draw = Stream::new(seed);
     for _ in 0..fields {
         let (field_seed, first) = (draw.next_u64(), draw.below(w * h));
         let start = Instant::now();
-        let (mut g, attempts) = generate::lay_counting(Mode::NoGuess, (w, h, mines), field_seed, first);
+        let (mut g, attempts) = generate::lay_counting(mode, (w, h, mines), field_seed, first);
         t.times.push(start.elapsed());
         t.fields += 1;
         t.attempts += attempts as u64;
-        let played = play::play(&mut g, first);
+        let played = play::play_at(&mut g, first, strength);
         if played.won && played.guesses == 0 {
             t.clean_wins += 1;
         }
@@ -115,14 +122,23 @@ pub fn no_guess((w, h, mines): (usize, usize, usize), fields: u64, seed: u64) ->
     t
 }
 
-/// No Guess generation on the web, as [`no_guess`] measures it natively: `[fields, uniform
-/// fields drawn, p50 ms, p99 ms, max ms]`. `scripts/wasm-bench.mjs` runs it under Node.
+/// Generation on the web, as [`generation`] measures it natively, for the Mode tagged `mode`:
+/// `[fields, uniform fields drawn, p50 ms, p99 ms, max ms]` (empty for a Mode laid at New
+/// Game). `scripts/wasm-bench.mjs` runs it under Node.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
-pub fn bench_no_guess(w: usize, h: usize, mines: usize, fields: u32, seed: u64) -> Vec<f64> {
-    let g = no_guess((w, h, mines), fields as u64, seed);
+pub fn bench_generation(mode: &str, w: usize, h: usize, mines: usize, fields: u32, seed: u64) -> Vec<f64> {
+    let Some(mode) = Mode::from_tag(mode).filter(|m| m.lays_on_first_click()) else { return Vec::new() };
+    let g = generation(mode, (w, h, mines), fields as u64, seed);
     let ms = |q: f64| g.percentile(q).as_secs_f64() * 1000.0;
     vec![g.fields as f64, g.attempts as f64, ms(0.5), ms(0.99), ms(1.0)]
+}
+
+/// The tags of the Modes generated on the first click, for `scripts/wasm-bench.mjs`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn generated_modes() -> Vec<String> {
+    Mode::ALL.into_iter().filter(|m| m.lays_on_first_click()).map(|m| m.tag().to_string()).collect()
 }
 
 /// The 95% Wilson score interval for `wins` out of `games`, as fractions.
@@ -168,6 +184,15 @@ mod tests {
         // The same seed draws the same fields.
         let b = no_guess((9, 9, 10), 40, 5);
         assert_eq!((a.attempts, a.clean_wins), (b.attempts, b.clean_wins));
+    }
+
+    #[test]
+    fn gentle_fields_are_counted_and_every_one_is_won_by_pattern_play() {
+        let a = generation(Mode::GentleNoGuess, (16, 16, 40), 20, 5);
+        assert_eq!((a.fields, a.times.len()), (20, 20));
+        assert_eq!(a.clean_wins, 20, "the Gentle bot wins every field with no guess");
+        // The same draws: no uniform field passes at Gentle strength that fails at full strength.
+        assert!(a.attempts >= no_guess((16, 16, 40), 20, 5).attempts);
     }
 
     #[test]

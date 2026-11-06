@@ -67,6 +67,7 @@ macro_rules! strings {
 strings! {
     // Modes.
     Classic: "Classic", "原版";
+    GentleNoGuess: "Gentle No Guess", "简单无猜";
     NoGuess: "No Guess", "无猜";
     // Levels.
     Beginner: "Beginner", "初级";
@@ -96,6 +97,18 @@ strings! {
     Marks: "Marks (?)", "问号标记";
     Color: "Color", "颜色";
     Language: "Language", "语言";
+    FontCredit: "Chinese text: MiSans by Xiaomi", "中文字体：小米 MiSans";
+    // History.
+    History: "History", "历史记录";
+    LevelRow: "Level", "级别";
+    FastestWin: "Fastest win", "最快纪录";
+    NoGames: "No games yet", "还没有对局";
+    Won: "Won", "胜利";
+    LostGame: "Lost", "失败";
+    Abandoned: "Abandoned", "放弃";
+    Seconds: "{} s", "{} 秒";
+    Bv3Clicks: "3BV {}/{} · {} clicks", "3BV {}/{} · 点击 {} 次";
+    ForcedGuesses: "{} forced, {} survived", "必须猜 {} 次，猜对 {} 次";
 }
 
 impl S {
@@ -115,6 +128,7 @@ impl S {
     pub fn mode(m: Mode) -> S {
         match m {
             Mode::Classic => S::Classic,
+            Mode::GentleNoGuess => S::GentleNoGuess,
             Mode::NoGuess => S::NoGuess,
         }
     }
@@ -157,6 +171,7 @@ mod tests {
         let zh = |k: S| k.get(Lang::ZhCn);
         assert_eq!([zh(S::Beginner), zh(S::Intermediate), zh(S::Expert), zh(S::Custom)], ["初级", "中级", "高级", "自定义"]);
         assert_eq!([zh(S::Classic), zh(S::NoGuess)], ["原版", "无猜"]);
+        assert_eq!(zh(S::GentleNoGuess), "简单无猜");
         assert!(zh(S::WonIn).contains("胜利") && zh(S::Lost).contains("失败"));
         assert!(zh(S::MinesLeft).contains("剩余雷数"));
         assert_eq!(zh(S::NewGame), "新游戏");

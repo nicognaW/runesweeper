@@ -8,6 +8,8 @@ use crate::game::{Cover, Game, Level, Mode, Outcome, Rng, Status, clamp_custom};
 use crate::generate::{self, Stream};
 use crate::generating::{self, Generating, Lay};
 use crate::icons::Mood;
+use crate::record::{self, Act, End, Layout, Move, Record};
+use crate::solver::play;
 use crate::storage::{self, Saved};
 use crate::strings::{Lang, S};
 use crate::style::{PITCH, WELL, window_size};
@@ -17,6 +19,8 @@ use crate::style::{PITCH, WELL, window_size};
 pub enum Panel {
     /// The Level picker, with Custom's sizes inline.
     Picker,
+    /// Game records, filtered by Mode and Level.
+    History,
     Settings,
 }
 
@@ -103,8 +107,19 @@ pub struct App {
     pub touch: bool,
     /// Whether this field deals its tiles in (not when a key asked for it).
     pub deal: bool,
-    /// The last win beat the fastest win for its level (set once History keeps records).
+    /// The last win beat the fastest win for its mode and level, or was the first.
     pub new_best: bool,
+    /// Every game record, oldest first.
+    pub history: Vec<Record>,
+    /// The game in play's record, click by click. It joins History when the game is won,
+    /// lost, or left after its first click.
+    pub record: Record,
+    /// When the field's first click came, on the app clock.
+    record_t0: Option<f64>,
+    /// The Mode and Level History shows; the current ones each time it opens.
+    pub history_filter: (Mode, Level),
+    /// Minutes from UTC to the player's clock, for History's dates.
+    pub utc_offset: i64,
     /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
     pub banner_done: bool,
     /// The shockwave has run; its full-window backdrop copy can go.
@@ -121,7 +136,14 @@ impl App {
     pub fn new() -> App {
         let saved = storage::load();
         let lang = saved.lang.unwrap_or_else(crate::locale::system);
-        Self::in_lang(saved, storage::seed(), lang)
+        let mut a = Self::in_lang(saved, storage::seed(), lang);
+        a.history = storage::load_history();
+        // A game the last run left in play (the window or tab closed on it) was abandoned.
+        if let Some(r) = storage::take_draft() {
+            storage::append_record(&r);
+            a.history.push(r);
+        }
+        a
     }
 
     /// The app in the saved language, English if none was picked (headless runs and tests
@@ -170,6 +192,11 @@ impl App {
             flag_mode: false,
             touch: cfg!(target_arch = "wasm32"),
             new_best: false,
+            history: Vec::new(),
+            record: Record::new(Mode::Classic, (0, 0, 0)),
+            record_t0: None,
+            history_filter: (Mode::Classic, level),
+            utc_offset: storage::utc_offset_minutes(),
             banner_done: false,
             shock_done: false,
             edit_w: TextEdit::new(""),
@@ -216,6 +243,8 @@ impl App {
     /// Classic deals its field now; the new modes draw a seed and wait for the first click.
     fn lay_new_field(&mut self) {
         let (w, h, m) = self.dims();
+        self.record = Record::new(self.mode, (w, h, m));
+        self.record_t0 = None;
         self.clock_waits = false;
         // A field still generating is cancelled: it never lands.
         self.generating = None;
@@ -252,6 +281,9 @@ impl App {
         }
         g.flags = self.game.flags;
         self.game = g;
+        self.record.layout = Layout::Seeded { seed: self.seed, first };
+        // The record's clock, like the timer, starts with the field: generating never counts.
+        self.record_t0 = Some(self.now);
         self.unlaid = false;
         self.clock_waits = true;
         self.play(false, first);
@@ -273,6 +305,7 @@ impl App {
     pub const SWEEP_AFTER: f64 = 0.6;
 
     fn fresh_field(&mut self) {
+        self.abandon();
         self.lay_new_field();
         self.field += 1;
         self.started_at = None;
@@ -340,6 +373,72 @@ impl App {
         self.release(false, Some(i));
     }
 
+    /// A chord on cell `i`.
+    pub fn chord_at(&mut self, i: usize) {
+        self.release(true, Some(i));
+    }
+
+    /// A right click on cell `i`.
+    pub fn mark_at(&mut self, i: usize) {
+        // A field being generated takes no input.
+        if self.game.over() || self.generating.is_some() {
+            return;
+        }
+        self.note(Act::Mark { marks: self.saved.marks }, i);
+        self.game.mark(i, self.saved.marks);
+        self.keep_draft();
+    }
+
+    /// Adds a click to the game in play's record.
+    fn note(&mut self, act: Act, cell: usize) {
+        let t0 = *self.record_t0.get_or_insert(self.now);
+        if self.record.moves.is_empty() {
+            self.record.at = storage::unix_ms();
+        }
+        let ms = ((self.now - t0).max(0.0) * 1000.0).round() as u32;
+        self.record.moves.push(Move { ms, act, cell });
+        match act {
+            Act::Open => self.record.left += 1,
+            Act::Chord => self.record.chords += 1,
+            Act::Mark { .. } => self.record.right += 1,
+        }
+    }
+
+    /// The game in play's record, as it would be kept if it ended now with `end`.
+    fn record_now(&self, end: End) -> Record {
+        let (three_bv, solved) = record::three_bv(&self.game);
+        Record { end, dims: (self.game.w, self.game.h, self.game.mines), seconds: self.seconds, three_bv, three_bv_solved: solved, ..self.record.clone() }
+    }
+
+    /// Keeps the game in play, so closing the window or tab still records it.
+    fn keep_draft(&self) {
+        if self.game.started && !self.game.over() {
+            storage::save_draft(Some(&self.record_now(End::Abandoned)));
+        }
+    }
+
+    /// The game ended: its record joins History. A field nobody clicked has none. A win that
+    /// beats the fastest for its mode and level, or is the first, turns the timer gold.
+    fn finish(&mut self, end: End) {
+        if !self.game.started {
+            return;
+        }
+        let r = self.record_now(end);
+        if end == End::Won {
+            self.new_best = record::fastest(&self.history, r.mode, r.dims).is_none_or(|best| r.seconds < best.seconds);
+        }
+        storage::append_record(&r);
+        storage::save_draft(None);
+        self.history.push(r);
+    }
+
+    /// The game in play is left for another field, or the app quits.
+    fn abandon(&mut self) {
+        if self.game.started && !self.game.over() {
+            self.finish(End::Abandoned);
+        }
+    }
+
     /// A field just laid starts its clock at the next poll, and a generation just started
     /// stamps its start there: ask for one now.
     fn wake_clock(&self, tx: &mut Tx) {
@@ -356,7 +455,7 @@ impl App {
             return;
         }
         if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
-            self.game.mark(i, self.saved.marks);
+            self.mark_at(i);
             return;
         }
         let chord = chord || (self.flag_mode && self.game.cells[i].cover == Cover::Open);
@@ -367,6 +466,10 @@ impl App {
     }
 
     fn release_at(&mut self, chord: bool, i: usize) {
+        if self.game.over() {
+            return;
+        }
+        self.note(if chord { Act::Chord } else { Act::Open }, i);
         if self.unlaid {
             // Only opening a cell lays the field; nothing else starts it.
             if chord || !matches!(self.game.cells[i].cover, Cover::Hidden | Cover::Question) {
@@ -375,23 +478,37 @@ impl App {
             self.lay_at(i);
             return;
         }
+        if !self.game.started && !chord {
+            // Classic keeps its field as dealt: replaying the first click moves a mine again.
+            self.record.layout = Layout::Mines((0..self.game.cells.len()).filter(|&j| self.game.cells[j].mine).collect());
+        }
         self.play(chord, i);
     }
 
     /// Opens or chords on `i` of a laid field.
     fn play(&mut self, chord: bool, i: usize) {
+        // A forced guess: this click can open a cell, and none could be proven safe.
+        let cover = self.game.cells[i].cover;
+        let opens = if chord { cover == Cover::Open } else { matches!(cover, Cover::Hidden | Cover::Question) };
+        let forced = opens && self.game.started && play::forced(&self.game);
         self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
+        if forced && out != Outcome::Nothing {
+            self.record.forced += 1;
+            self.record.survived += !matches!(out, Outcome::Lost(_)) as u32;
+        }
         self.start_clock();
         match out {
-            Outcome::Nothing | Outcome::Opened(_) => {}
+            Outcome::Nothing | Outcome::Opened(_) => self.keep_draft(),
             Outcome::Lost(m) => {
                 self.moments.boom = Some((self.now, self.cell_center(m)));
                 self.started_at = None;
+                self.finish(End::Lost);
             }
             Outcome::Won => {
                 self.moments.won = Some(self.now);
                 self.started_at = None;
+                self.finish(End::Won);
             }
         }
     }
@@ -419,6 +536,9 @@ impl App {
             self.edit_w = TextEdit::new(&w.to_string());
             self.edit_h = TextEdit::new(&h.to_string());
             self.edit_m = TextEdit::new(&m.to_string());
+        }
+        if panel == Panel::History {
+            self.history_filter = (self.mode, self.level);
         }
         self.panel = Some(panel);
     }
@@ -483,7 +603,7 @@ impl App {
             return;
         }
         if let Some(i) = self.cell_at(x, y) {
-            self.game.mark(i, self.saved.marks);
+            self.mark_at(i);
         }
     }
 
@@ -623,9 +743,9 @@ impl App {
                 self.wake_clock(tx);
                 true
             }
-            Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() && self.generating.is_none() => {
+            Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() => {
                 let i = self.hover_cell.unwrap();
-                self.game.mark(i, self.saved.marks);
+                self.mark_at(i);
                 true
             }
             Key::Function(2) => {
@@ -666,6 +786,7 @@ impl App {
                 true
             }
             Key::Command('q') | Key::Command('w') => {
+                self.abandon();
                 tx.quit();
                 true
             }

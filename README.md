@@ -35,7 +35,7 @@ that couldn't were cut.
   toolbar in about 0.2 s; Escape closes one in the same frame.
 - **A new field** from the face or the picker deals in from the centre in under half a second;
   from F2 it's simply there, old field gone in the same frame.
-- **A field that takes its time** (No Guess generates after the first click, off the UI thread):
+- **A field that takes its time** (the no-guess modes generate after the first click, off the UI thread):
   the face thinks at once, the field holds still, and only past 600 ms does a slow band of light
   sweep the hidden tiles, stopping in the frame the field is ready. Quick fields show nothing
   but the face. With Reduce Motion the light breathes in place instead of travelling.
@@ -93,17 +93,28 @@ level (seed 1, release build, one native core):
 
 The bot then wins every one of them without a guess.
 
-The web build generates in a worker; its wasm (the site's own build, run by Node's V8, same
-seed) takes:
+Gentle No Guess is the same with the bot at Gentle strength: one number alone, two overlapping
+numbers, and the count of mines left only once 12 or fewer cells are unresolved. Same rules:
 
-| Level | Generation p50 | p99 |
-| --- | --- | --- |
-| Beginner | 0.09 ms | 0.65 ms |
-| Intermediate | 0.55 ms | 2.2 ms |
-| Expert | 7.6 ms | 45 ms |
+| Level | Fields accepted | Generation p50 | p99 |
+| --- | --- | --- | --- |
+| Beginner | 88.5% | 0.04 ms | 0.13 ms |
+| Intermediate | 69.5% | 0.34 ms | 1.3 ms |
+| Expert | 13.2% | 5.3 ms | 35 ms |
+
+The Gentle bot then wins every one of them without a guess.
+
+The web build generates in a worker; its wasm (the site's own build, run by Node's V8, same
+fields and seed) takes:
+
+| Level | No Guess p50 | p99 | Gentle No Guess p50 | p99 |
+| --- | --- | --- | --- | --- |
+| Beginner | 0.08 ms | 0.30 ms | 0.09 ms | 0.35 ms |
+| Intermediate | 0.53 ms | 2.1 ms | 0.60 ms | 2.6 ms |
+| Expert | 7.2 ms | 43 ms | 7.5 ms | 46 ms |
 
 ```sh
-cargo run --release --example solver -- 10000 1 1000   # Classic games per level, seed, No Guess fields
+cargo run --release --example solver -- 10000 1 1000   # Classic games per level, seed, fields per mode
 ```
 
 It prints the same columns for Beginner and Intermediate; the same seed gives the same numbers.
@@ -134,9 +145,9 @@ The same game as Windows Minesweeper:
 - A first click on a mine moves it to the first free square reading from the top left, skipping the last row and column as Windows does. If that area is all mines, nothing happens and the next click is still a first click.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
-- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. It is generated off the UI thread (a thread on desktop, a web worker in the browser), so the window never freezes; F2 or the face cancels it for a fresh field. The timer starts once the field is ready.
+- **Modes**: Classic (原版) is everything above, unchanged. In **No Guess** (无猜) no mines exist until your first click; the field is then laid with the 3×3 around the click clear, so it always opens an area, and redrawn until perfect logic (the mine count included) can finish it from there. The field is fully determined by mode, level, seed and first click. It is generated off the UI thread (a thread on desktop, a web worker in the browser), so the window never freezes; F2 or the face cancels it for a fresh field. The timer starts once the field is ready. **Gentle No Guess** (简单无猜) works the same, but only keeps fields that one number, or two overlapping numbers, at a time can finish, with the mine count near the end: pattern play always wins.
 - **Toolbar**: the chip on the left shows the Mode and Level and opens the picker: a row for the Mode, then Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99) or Custom, whose width (9–30), height (9–24) and mines (up to (w−1)(h−1)) are typed in place; Enter or the Custom row starts it. Picking starts a new field at once.
-- **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Until the MiSans font is bundled, Chinese uses the system's fonts on desktop, and may show as boxes on the web.
+- **Settings** (the button on the right): Marks (?), Color and Language (English or 简体中文). The first launch follows the system language (the browser's on the web): any Chinese locale means 简体中文. Chinese is drawn in Xiaomi's MiSans and Latin letters and digits in Inter, both built in, so Chinese shows on any machine and in the browser.
 - The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 
 Settings are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,
@@ -184,5 +195,11 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
 - `src/toolbar.rs`: the toolbar and the panels it opens.
 - `src/gfx.rs`: the compositor that turns effect slots into `rune-fx` shaders.
 - `vendor/rune-fx`: Rune's effects crate with a one-line fix so it builds for wasm.
+- `src/fonts.rs`, `build.rs`, `assets/fonts/`: the fonts. The build cuts MiSans VF down to the
+  characters in `src/strings.rs` (about 27 KB) and compiles it in; a new string needs no font step.
 
-MIT. Rune is MIT, © Anomaly. Not affiliated with Microsoft.
+MIT, except the fonts. MiSans VF (`assets/fonts/MiSans/`) is Xiaomi's, used under its own
+agreement, which is not an open-source licence: it may not be redistributed on its own or
+changed, and the app must say it uses MiSans (Settings does). Inter (`assets/fonts/Inter/`) is
+under the SIL Open Font License 1.1. Every build ships `NOTICES.txt` with both texts.
+Rune is MIT, © Anomaly. Not affiliated with Microsoft.

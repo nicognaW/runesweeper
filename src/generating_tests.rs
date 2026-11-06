@@ -11,6 +11,7 @@ use crate::app::App;
 use crate::game::{Cover, Game, Level, Mode};
 use crate::generate::{self, Dims};
 use crate::generating;
+use crate::record::{Act, Layout};
 use crate::storage::Saved;
 use crate::toolbar_tests::{click, press, runtime, shown};
 
@@ -138,6 +139,9 @@ fn the_window_keeps_drawing_while_a_slow_field_is_generated() {
     // The timer starts when the field is ready.
     let landed = rt.state.now;
     assert_eq!((rt.state.started_at, rt.state.seconds), (Some(landed), 1));
+    // Its record names the field by seed and first click, and starts with that click.
+    assert_eq!(rt.state.record.layout, Layout::Seeded { seed, first });
+    assert_eq!((rt.state.record.moves[0].act, rt.state.record.moves[0].cell), (Act::Open, first));
 }
 
 #[test]
@@ -148,7 +152,7 @@ fn f2_or_the_face_cancels_and_the_next_first_click_starts_afresh() {
         press(&mut rt, Key::Function(2));
         rt.update(|s, _| s.lay = cancelled_lay);
         rt.frame(1.0 / 60.0);
-        let (seed, field) = (rt.state.seed, rt.state.field);
+        let (seed, field, kept) = (rt.state.seed, rt.state.field, rt.state.history.len());
         tap(&mut rt, 40);
         assert!(rt.state.generating.is_some() && thinking(&rt));
         if cancel == "F2" {
@@ -161,6 +165,7 @@ fn f2_or_the_face_cancels_and_the_next_first_click_starts_afresh() {
         assert!(!thinking(&rt) && !shown(&rt, "sweep"), "{cancel}: back to a smile");
         assert!(rt.state.field > field && rt.state.seed != seed, "{cancel}: a fresh field");
         assert!(rt.state.unlaid && mines(&rt.state.game).is_empty());
+        assert_eq!(rt.state.history.len(), kept, "{cancel}: a field that never landed is never recorded");
 
         // The next first click starts a fresh generation, of the new seed.
         rt.update(|s, _| s.lay = generate::lay);
