@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx};
 
-use crate::game::{Cover, Game, Level, Outcome, Rng, Status, clamp_custom};
+use crate::game::{Cover, Game, Level, Mode, Outcome, Rng, Status, clamp_custom};
+use crate::generate::{self, Stream};
 use crate::icons::Mood;
 use crate::storage::{self, Saved};
 use crate::strings::{Lang, S};
@@ -44,7 +45,19 @@ pub struct Moments {
 
 pub struct App {
     pub game: Game,
+    pub mode: Mode,
     pub level: Level,
+    /// Classic's `rand()` stream, one for the whole session as Windows seeds once.
+    pub rng: Rng,
+    /// Where the new modes' seeds come from.
+    pub seeds: Stream,
+    /// This field's seed (the new modes): with the mode, level and first click it names the
+    /// field.
+    pub seed: u64,
+    /// The new modes' field has no mines yet: the first click lays them.
+    pub unlaid: bool,
+    /// The field was just laid: the clock starts at the next poll, so laying never counts.
+    pub clock_waits: bool,
     pub saved: Saved,
     /// The language every string is in: the one picked in Settings, else the system's.
     pub lang: Lang,
@@ -107,11 +120,16 @@ impl App {
     fn in_lang(saved: Saved, seed: u32, lang: Lang) -> App {
         shape_in(lang);
         let level = saved.level;
-        let (w, h, m) = level.dims().unwrap_or(saved.custom);
-        App {
+        let mut a = App {
             lang,
-            game: Game::new(w, h, m, Rng::new(seed)),
+            game: Game::unlaid(9, 9, 10),
+            mode: saved.mode,
             level,
+            rng: Rng::new(seed),
+            seeds: Stream::new(seed as u64),
+            seed: 0,
+            unlaid: false,
+            clock_waits: false,
             saved,
             field: 0,
             now: 0.0,
@@ -138,7 +156,9 @@ impl App {
             edit_w: TextEdit::new(""),
             edit_h: TextEdit::new(""),
             edit_m: TextEdit::new(""),
-        }
+        };
+        a.lay_new_field();
+        a
     }
 
     /// `k` in the game's language.
@@ -174,10 +194,36 @@ impl App {
         self.fresh_field();
     }
 
-    fn fresh_field(&mut self) {
+    /// Classic deals its field now; the new modes draw a seed and wait for the first click.
+    fn lay_new_field(&mut self) {
         let (w, h, m) = self.dims();
-        // One stream for the whole session, as Windows seeds once at startup.
-        self.game = Game::new(w, h, m, self.game.rng);
+        self.clock_waits = false;
+        self.unlaid = self.mode.lays_on_first_click();
+        if self.unlaid {
+            self.seed = self.seeds.next_u64();
+            self.game = Game::unlaid(w, h, m);
+        } else {
+            // One stream for the whole session, as Windows seeds once at startup.
+            self.game = Game::new(w, h, m, self.rng);
+            self.rng = self.game.rng;
+        }
+    }
+
+    /// The new modes' first click: the field its mode, level, seed and click name, with any
+    /// marks already placed kept. On the UI thread for now; it is one call, so it can move.
+    fn lay_at(&mut self, first: usize) {
+        let mut g = generate::lay(self.mode, self.dims(), self.seed, first);
+        for (c, old) in g.cells.iter_mut().zip(&self.game.cells) {
+            c.cover = old.cover;
+        }
+        g.flags = self.game.flags;
+        self.game = g;
+        self.unlaid = false;
+        self.clock_waits = true;
+    }
+
+    fn fresh_field(&mut self) {
+        self.lay_new_field();
         self.field += 1;
         self.started_at = None;
         self.seconds = 0;
@@ -186,6 +232,15 @@ impl App {
         self.banner_done = false;
         self.shock_done = false;
         self.moments = Moments::default();
+    }
+
+    /// A Mode from the picker: saved, and a new field at once. The picker stays open, so a
+    /// Level can be picked next.
+    pub fn pick_mode(&mut self, mode: Mode) {
+        self.mode = mode;
+        self.saved.mode = mode;
+        storage::save(&self.saved);
+        self.new_game();
     }
 
     pub fn set_level(&mut self, level: Level, tx: &mut Tx) {
@@ -221,9 +276,21 @@ impl App {
     }
 
     fn start_clock(&mut self) {
-        if self.started_at.is_none() && self.game.status == Status::Playing {
+        if self.started_at.is_none() && self.game.status == Status::Playing && !self.clock_waits {
             self.started_at = Some(self.now);
             self.seconds = 1;
+        }
+    }
+
+    /// A left release on cell `i`.
+    pub fn open_at(&mut self, i: usize) {
+        self.release(false, Some(i));
+    }
+
+    /// A field just laid starts its clock at the next poll: ask for one now.
+    fn wake_clock(&self, tx: &mut Tx) {
+        if self.clock_waits {
+            tx.wake_after(Duration::ZERO);
         }
     }
 
@@ -242,6 +309,13 @@ impl App {
     }
 
     fn release_at(&mut self, chord: bool, i: usize) {
+        if self.unlaid {
+            // Only opening a cell lays the field; nothing else starts it.
+            if chord || !matches!(self.game.cells[i].cover, Cover::Hidden | Cover::Question) {
+                return;
+            }
+            self.lay_at(i);
+        }
         self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
         self.start_clock();
@@ -329,6 +403,7 @@ impl App {
                 self.press = Press { right: self.press.right && !chord, ..Press::default() };
                 if any && !d.cancelled() {
                     self.release(chord, cell);
+                    self.wake_clock(tx);
                 }
             }
         }
@@ -391,6 +466,14 @@ impl App {
             }
             tx.wake_after(Duration::from_secs_f64((t + Self::BANNER_FOR - now).max(0.01)));
         }
+        if self.clock_waits {
+            self.clock_waits = false;
+            self.start_clock();
+            if self.started_at.is_some() {
+                tx.wake_after(Duration::from_secs(1));
+                return true;
+            }
+        }
         let Some(t0) = self.started_at else { return false };
         if self.game.status != Status::Playing {
             return false;
@@ -437,6 +520,7 @@ impl App {
                 let i = self.hover_cell.unwrap();
                 let chord = self.game.cells[i].cover == Cover::Open;
                 self.release(chord, Some(i));
+                self.wake_clock(tx);
                 true
             }
             Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() => {

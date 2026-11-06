@@ -1,10 +1,11 @@
 //! Settings, kept as `key=value` lines: a file in the user's config folder on
 //! desktop, `localStorage` on the web.
 
-use crate::game::Level;
+use crate::game::{Level, Mode};
 use crate::strings::Lang;
 
 pub struct Saved {
+    pub mode: Mode,
     pub level: Level,
     pub custom: (usize, usize, usize),
     pub marks: bool,
@@ -16,6 +17,7 @@ pub struct Saved {
 impl Default for Saved {
     fn default() -> Self {
         Saved {
+            mode: Mode::Classic,
             level: Level::Beginner,
             custom: (9, 9, 10),
             marks: true,
@@ -32,6 +34,7 @@ impl Saved {
             let Some((k, v)) = line.split_once('=') else { continue };
             let num = |v: &str| v.trim().parse::<usize>().ok();
             match k.trim() {
+                "mode" => s.mode = Mode::from_tag(v.trim()).unwrap_or_default(),
                 "level" => {
                     s.level = match v.trim() {
                         "intermediate" => Level::Intermediate,
@@ -64,7 +67,7 @@ impl Saved {
             Level::Custom => "custom",
         };
         let (w, h, m) = self.custom;
-        let mut out = format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.marks as u8, self.color as u8);
+        let mut out = format!("mode={}\nlevel={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.mode.tag(), self.marks as u8, self.color as u8);
         if let Some(l) = self.lang {
             out += &format!("lang={}\n", l.tag());
         }

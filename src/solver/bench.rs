@@ -1,7 +1,7 @@
-//! The solver benchmark: seeded Classic games played by the bot, and the numbers that
-//! describe how it did.
+//! The solver benchmark: seeded Classic games played by the bot, seeded No Guess fields
+//! generated, and the numbers that describe how each went.
 //!
-//! The rule: Classic fields laid from the MSVC `rand()` stream seeded once with `seed`, one
+//! Classic's rule: Classic fields laid from the MSVC `rand()` stream seeded once with `seed`, one
 //! field after another as the game deals them; the first click on the top-left cell, with
 //! XP's first-click relocation. The bot plays every proof, then the cell least likely to be
 //! a mine under uniform odds (it does not model the relocation's bias toward the top left).
@@ -9,7 +9,8 @@
 use std::time::{Duration, Instant};
 
 use super::play;
-use crate::game::{Game, Rng};
+use crate::game::{Game, Mode, Rng};
+use crate::generate::{self, Stream};
 
 /// How the bot did over a run of games.
 #[derive(Clone, Copy, Debug, Default)]
@@ -62,6 +63,55 @@ pub fn classic((w, h, mines): (usize, usize, usize), games: u64, seed: u32) -> T
     t
 }
 
+/// How No Guess generation went over a run of fields.
+#[derive(Clone, Debug, Default)]
+pub struct Generation {
+    pub fields: u64,
+    /// Uniform fields drawn, accepted or not.
+    pub attempts: u64,
+    /// Fields the bot then won without a guess (all of them, if generation is right).
+    pub clean_wins: u64,
+    /// Time to generate each field, ascending.
+    pub times: Vec<Duration>,
+}
+
+impl Generation {
+    /// The share of uniform fields the bot could clear.
+    pub fn acceptance(&self) -> f64 {
+        self.fields as f64 / self.attempts.max(1) as f64
+    }
+    /// The generation time `q` of the way up (0.5 the median), by the nearest rank.
+    pub fn percentile(&self, q: f64) -> Duration {
+        let n = self.times.len();
+        if n == 0 {
+            return Duration::ZERO;
+        }
+        self.times[((q * n as f64).ceil() as usize).clamp(1, n) - 1]
+    }
+}
+
+/// Generates `fields` No Guess fields of `(columns, rows, mines)`: each one's seed and first
+/// click drawn in turn from `seed`, the click anywhere on the field. Each field is then played
+/// by the bot, to check it is won with no guess.
+pub fn no_guess((w, h, mines): (usize, usize, usize), fields: u64, seed: u64) -> Generation {
+    let mut t = Generation::default();
+    let mut draw = Stream::new(seed);
+    for _ in 0..fields {
+        let (field_seed, first) = (draw.next_u64(), draw.below(w * h));
+        let start = Instant::now();
+        let (mut g, attempts) = generate::lay_counting(Mode::NoGuess, (w, h, mines), field_seed, first);
+        t.times.push(start.elapsed());
+        t.fields += 1;
+        t.attempts += attempts as u64;
+        let played = play::play(&mut g, first);
+        if played.won && played.guesses == 0 {
+            t.clean_wins += 1;
+        }
+    }
+    t.times.sort();
+    t
+}
+
 /// The 95% Wilson score interval for `wins` out of `games`, as fractions.
 pub fn wilson(wins: u64, games: u64) -> (f64, f64) {
     if games == 0 {
@@ -93,6 +143,18 @@ mod tests {
     /// The parts of a tally that do not depend on the machine.
     fn counts(t: &Tally) -> (u64, u64, u64, u64) {
         (t.games, t.wins, t.guesses_in_wins, t.clean_wins)
+    }
+
+    #[test]
+    fn no_guess_fields_are_counted_and_every_one_is_won_without_a_guess() {
+        let a = no_guess((9, 9, 10), 40, 5);
+        assert_eq!((a.fields, a.times.len()), (40, 40));
+        assert_eq!(a.clean_wins, 40, "the bot wins every field with no guess");
+        assert!(a.attempts >= 40 && a.acceptance() <= 1.0 && a.acceptance() > 0.0);
+        assert!(a.percentile(0.5) <= a.percentile(0.99));
+        // The same seed draws the same fields.
+        let b = no_guess((9, 9, 10), 40, 5);
+        assert_eq!((a.attempts, a.clean_wins), (b.attempts, b.clean_wins));
     }
 
     #[test]
