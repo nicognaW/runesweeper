@@ -8,7 +8,7 @@
 
 use std::fmt::Display;
 
-use crate::game::Level;
+use crate::game::{Level, Mode};
 
 /// The game's language.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -65,6 +65,9 @@ macro_rules! strings {
 }
 
 strings! {
+    // Modes.
+    Classic: "Classic", "原版";
+    NoGuess: "No Guess", "无猜";
     // Levels.
     Beginner: "Beginner", "初级";
     Intermediate: "Intermediate", "中级";
@@ -85,7 +88,8 @@ strings! {
     // The toolbar and its panels.
     FlagMode: "Flag mode", "标雷模式";
     Settings: "Settings", "设置";
-    LevelPicker: "Level", "级别";
+    LevelPicker: "Mode and level", "模式与级别";
+    ModeRow: "Mode", "模式";
     Width: "Width", "宽度";
     Height: "Height", "高度";
     Mines: "Mines", "雷数";
@@ -106,6 +110,13 @@ impl S {
             out.push_str(part);
         }
         out
+    }
+
+    pub fn mode(m: Mode) -> S {
+        match m {
+            Mode::Classic => S::Classic,
+            Mode::NoGuess => S::NoGuess,
+        }
     }
 
     pub fn level(l: Level) -> S {
@@ -145,6 +156,7 @@ mod tests {
     fn the_community_terms_are_used() {
         let zh = |k: S| k.get(Lang::ZhCn);
         assert_eq!([zh(S::Beginner), zh(S::Intermediate), zh(S::Expert), zh(S::Custom)], ["初级", "中级", "高级", "自定义"]);
+        assert_eq!([zh(S::Classic), zh(S::NoGuess)], ["原版", "无猜"]);
         assert!(zh(S::WonIn).contains("胜利") && zh(S::Lost).contains("失败"));
         assert!(zh(S::MinesLeft).contains("剩余雷数"));
         assert_eq!(zh(S::NewGame), "新游戏");

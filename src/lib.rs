@@ -20,6 +20,8 @@ mod toolbar_tests;
 mod lang_tests;
 #[cfg(test)]
 mod generate_tests;
+#[cfg(test)]
+mod mode_tests;
 
 use app::App;
 use game::Level;
@@ -82,6 +84,11 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         a.seconds = 37;
         a.new_best = true;
         a.moments.won = Some(0.05);
+    }),
+    ("no-guess", |a| {
+        let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
+        *a = App::with(saved, 5);
+        a.open_at(a.game.idx(15, 8));
     }),
     ("picker", |a| {
         *a = scene(Level::Beginner, 7);
