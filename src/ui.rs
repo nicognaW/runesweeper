@@ -352,7 +352,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         effect(gfx::SHOCK).key("shock").effect_backdrop(true).effect_data([origin[0] + sp[0], origin[1] + sp[1], st, 16.0]).absolute(0.0, 0.0).w_full().h_full().inert()
     });
     let cheat = s.cheat.then(|| {
-        let safe = s.hover_cell.is_some_and(|i| !s.game.cells[i].mine);
+        let safe = s.pixel_safe;
         el().key("xyzzy").absolute(0.0, 0.0).size(2.0, 2.0).fill(if safe { rune::Color::WHITE } else { rune::Color::BLACK }).inert()
     });
     let body = col()

@@ -194,7 +194,8 @@ fn plain() -> bool {
 }
 
 pub fn run() {
-    let app = rune::App::new(spec());
+    // Shift on its own toggles the xyzzy cheat.
+    let app = rune::App::new(spec()).modifier_keys();
     if plain() { app.run() } else { app.compositor(gfx::Gfx::default()).run() }
 }
 

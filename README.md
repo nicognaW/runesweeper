@@ -87,7 +87,7 @@ The same game as Windows Minesweeper:
 - Losing shows every mine, crosses out wrong flags and marks the one you hit in red. Winning flags the rest.
 - **Game** menu: New (F2), Beginner (9×9, 10), Intermediate (16×16, 40), Expert (30×16, 99), Custom (9–24 × 9–30, up to (h−1)(w−1) mines), Marks, Color, Best Times, Exit.
 - **Best Times** keeps the fastest name per level; beat one and you're asked for your name.
-- The face starts a new game. `xyzzy`, then Shift+Enter, turns on the old corner-pixel cheat.
+- The face starts a new game. `xyzzy`, then Shift, turns the old corner-pixel cheat on or off.
 
 Settings and best times are saved to `%APPDATA%\runesweeper`, `~/Library/Application Support/runesweeper`,
 `~/.config/runesweeper`, or the browser's local storage.

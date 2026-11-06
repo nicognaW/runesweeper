@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use rune::{Key, KeyEvent, Live, TextEdit, Tx};
+use rune::{Key, KeyEvent, Live, Modifier, TextEdit, Tx};
 
 use crate::game::{Cover, Game, Level, Outcome, Rng, Status, clamp_custom};
 use crate::icons::Mood;
@@ -69,9 +69,12 @@ pub struct App {
     pub hover_at: Live<[f32; 2]>,
     pub hover_on: Live<f32>,
     pub hover_cell: Option<usize>,
-    /// XYZZY, then Shift+Enter: the corner pixel tells mine from safe under the pointer.
+    /// XYZZY, then Shift: the corner pixel tells mine from safe under the pointer.
     pub xyzzy: usize,
     pub cheat: bool,
+    /// The corner pixel: the last square the pointer was over is safe. It keeps its colour
+    /// off the field, as Windows' does.
+    pub pixel_safe: bool,
     /// Touch screens have no right button: while on, a tap flags (a tap on a number chords).
     pub flag_mode: bool,
     /// Whether this field deals its tiles in (not when a key asked for it).
@@ -118,6 +121,7 @@ impl App {
             hover_cell: None,
             xyzzy: 0,
             cheat: false,
+            pixel_safe: false,
             icon: false,
             deal: true,
             flag_mode: false,
@@ -214,6 +218,7 @@ impl App {
     }
 
     fn release_at(&mut self, chord: bool, i: usize) {
+        self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
         if out != Outcome::Nothing && !self.saved.played {
             self.saved.played = true;
@@ -238,14 +243,16 @@ impl App {
         let Some(li) = self.level.index() else { return };
         if self.seconds < self.saved.best[li].0 {
             self.new_best = true;
-            self.edit_name = TextEdit::new("Anonymous");
+            // Windows offers the name already on the record, usually the player's own.
+            self.edit_name = TextEdit::new(&self.saved.best[li].1);
             self.dialog = Some(Dialog::Record(li));
         }
     }
 
     pub fn save_record(&mut self, li: usize) {
-        let name = self.edit_name.text.trim().to_string();
-        self.saved.best[li] = (self.seconds, if name.is_empty() { "Anonymous".into() } else { name });
+        // Windows' name box holds 32 characters, and a blank name stays blank.
+        let name: String = self.edit_name.text.trim().chars().take(32).collect();
+        self.saved.best[li] = (self.seconds, name);
         storage::save(&self.saved);
         self.dialog = Some(Dialog::BestTimes);
     }
@@ -256,10 +263,8 @@ impl App {
     }
 
     pub fn toggle_marks(&mut self) {
+        // Only the next right click changes: question marks already placed stay.
         self.saved.marks = !self.saved.marks;
-        if !self.saved.marks {
-            self.game.clear_questions();
-        }
         storage::save(&self.saved);
     }
 
@@ -268,8 +273,9 @@ impl App {
         storage::save(&self.saved);
     }
 
+    /// The dialog starts from the field being played, as Windows' does.
     pub fn open_custom(&mut self) {
-        let (w, h, m) = self.saved.custom;
+        let (w, h, m) = self.dims();
         self.edit_h = TextEdit::new(&h.to_string());
         self.edit_w = TextEdit::new(&w.to_string());
         self.edit_m = TextEdit::new(&m.to_string());
@@ -293,6 +299,8 @@ impl App {
                 }
                 match button {
                     rune::PointerButton::Middle => self.press.middle = true,
+                    // Shift with the left button is a chord, as both buttons are.
+                    _ if tx.mods().shift => self.press.middle = true,
                     _ => self.press.left = true,
                 }
                 self.press.cell = cell;
@@ -341,6 +349,9 @@ impl App {
             None => {
                 self.hover_on.set(0.0);
             }
+        }
+        if let Some(i) = cell {
+            self.pixel_safe = !self.game.cells[i].mine;
         }
         if self.cheat && self.hover_cell != cell {
             self.hover_cell = cell;
@@ -434,6 +445,13 @@ impl App {
                 self.menu = None;
                 true
             }
+            // Once the word is typed, each Shift press turns the cheat on or off.
+            Key::Modifier { modifier: Modifier::ShiftLeft | Modifier::ShiftRight, pressed: true } if self.xyzzy >= 5 => {
+                self.cheat = !self.cheat;
+                true
+            }
+            // Other keys no longer count once the word is in.
+            Key::Text(_) if self.xyzzy >= 5 => false,
             Key::Text(t) if !e.mods.cmd && !e.mods.ctrl => {
                 let word = "xyzzy";
                 let c = t.to_ascii_lowercase();
@@ -443,11 +461,6 @@ impl App {
                     self.xyzzy = if word.starts_with(&c) { c.len() } else { 0 };
                 }
                 false
-            }
-            Key::Enter if e.mods.shift && self.xyzzy >= 5 => {
-                self.cheat = !self.cheat;
-                self.xyzzy = 0;
-                true
             }
             Key::Command('n') => {
                 self.new_game_now();

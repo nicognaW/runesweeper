@@ -209,10 +209,18 @@ impl Game {
             return Outcome::Nothing;
         }
         self.turn += 1;
-        if let Some(&m) = targets.iter().find(|&&j| self.cells[j].mine) {
+        let mines: Vec<usize> = targets.iter().copied().filter(|&j| self.cells[j].mine).collect();
+        let safe: Vec<usize> = targets.iter().copied().filter(|&j| !self.cells[j].mine).collect();
+        let n = self.flood(&safe);
+        if let Some(&m) = mines.first() {
+            // A wrong flag: Windows still opens the safe squares, and every mine it uncovers
+            // shows red.
+            for &j in &mines[1..] {
+                self.cells[j].cover = Cover::Open;
+                self.cells[j].turn = self.turn;
+            }
             return self.lose(m);
         }
-        let n = self.flood(&targets);
         self.check_win().unwrap_or(Outcome::Opened(n))
     }
 
@@ -237,12 +245,10 @@ impl Game {
         true
     }
 
-    /// Turning marks off clears the question marks already placed.
-    pub fn clear_questions(&mut self) {
-        for c in &mut self.cells {
-            if c.cover == Cover::Question {
-                c.cover = Cover::Hidden;
-            }
+    /// Any release on a fresh field starts the clock, even one that opens nothing.
+    pub fn start(&mut self) {
+        if self.status == Status::Ready {
+            self.status = Status::Playing;
         }
     }
 
@@ -460,6 +466,20 @@ mod tests {
         g.mark(1, true);
         g.mark(8, true);
         assert_eq!(g.chord(4), Outcome::Lost(0));
+    }
+
+    #[test]
+    fn a_wrong_chord_opens_the_safe_squares_and_reds_every_mine() {
+        let mut g = field(&["*.*", "...", "*.."]);
+        g.started = true;
+        g.open(4);
+        g.mark(6, true);
+        g.mark(1, true);
+        g.mark(5, true);
+        assert!(matches!(g.chord(4), Outcome::Lost(0)));
+        assert_eq!(g.cells[2].cover, Cover::Open, "the other unflagged mine is shown as hit");
+        assert_eq!(g.cells[3].cover, Cover::Open, "the safe squares still open");
+        assert_eq!(g.cells[6].cover, Cover::Flag);
     }
 
     #[test]

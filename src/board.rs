@@ -114,7 +114,8 @@ pub fn view(s: &App, reduced: bool) -> El {
         let wrong_flag = lost && !c_.mine && c_.cover == Cover::Flag;
         let open = c_.cover == Cover::Open || shown_mine || wrong_flag;
         if open {
-            let is_hit = lost && i == hit;
+            // The mine stepped on, and any others a wrong chord uncovered.
+            let is_hit = lost && c_.mine && c_.cover == Cover::Open;
             let mut cell = el().key(format!("o{f}-{i}")).absolute(x, y).size(TILE, TILE).radius(4.0).center();
             cell = if is_hit {
                 cell.radial_gradient([0.5, 0.5], TILE * 0.75, [(0.0, p.hit_core), (1.0, p.hit)])
