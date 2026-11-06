@@ -21,25 +21,34 @@ and shockwaves.
   <img src="docs/menu.webp" alt="The Game menu" width="40%">
 </p>
 
-## What moves
+## What moves, and what doesn't
 
-- A new field deals in from the centre; opened squares lift off in a ripple from the click, and
-  their numbers pop up under a soft halo of their own colour.
-- A highlight glides from square to square on a spring, and the face's eyes follow the pointer.
-- A mine sends a shockwave through the window, knocks the console sideways, flashes it red and
-  sets off the other mines in a chain outward from the hit; the one you stepped on burns.
-- A win turns the flagged tiles gold, runs a swell across the field, throws sparkles and lights
-  a glow around the console.
-- The LED counters crossfade their segments like real LEDs. Shaders do the backdrop, the
-  liquid-metal rim, the plastic face, the LED glow, ripples, fire and the shockwave.
-- Nothing draws while nobody plays: the ambient effects ease to a stop 10 s after the last
-  input and start again on the next. With Reduce Motion on, travel and bounce are off.
+Motion follows Emil Kowalski's rule of thumb: the more often you see something, the less it
+moves. Every animation here had to justify itself (the `remove-animations` skill), and most
+that couldn't were cut.
+
+- **Every click** (hundreds a game): the tile lifts off in 240 ms, rippling out from the click
+  over at most 300 ms. Numbers are there at once; nothing makes you wait to read them. The
+  selector sits on the square under the pointer, with no glide to lag behind it.
+- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2) never animate.
+- **A new field** from the face or the menu deals in from the centre in under half a second;
+  from F2 it's simply there.
+- **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
+  out from the one you hit, then still.
+- **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
+  field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
+- The result banner straddles the field's edge, says how it went, and leaves after 3 s.
+- Shaders do the backdrop, the liquid-metal rim, the plastic face, the LED glow, the blasts and
+  the glow, and hold still when nothing is happening: an idle window draws nothing.
+- Entrances and exits use a strong ease-out; nothing grows from nothing. With Reduce Motion on,
+  travel and bounce are off.
 - Small windows and phones get the whole console, scaled to fit.
 
 Motion is checked with Rune's motion gate (pops, jumps, snaps, overshoot that wasn't meant):
 
 ```sh
 RUNE_MOTION_GATE=gate.txt runesweeper --scene beginner --script scripts/play.json --duration 4.5 --out frames
+RUNE_MOTION_GATE=gate.txt runesweeper --scene lost --duration 4 --out frames   # also: keys.json, won, first-run
 ```
 
 ## Download
@@ -60,6 +69,8 @@ The same game as Windows Minesweeper:
 
 - **Left click** opens a square. Press and drag: the square under the pointer stays sunk until you let go, and the face gasps.
 - **Right click** cycles flag → `?` → blank (`?` only with *Game ▸ Marks*).
+- **Keyboard**: arrows move the selector, Space opens (or chords on a number), F flags, F2 starts again.
+- **Touch** (the web build): the *Flag* button in the menu bar makes taps place flags; a tap on a number chords.
 - **Chord**: on a number whose flags are all placed, press both buttons (or the middle one) to open its other neighbours. A wrong flag loses.
 - The first click is never a mine: one that was there moves to the top-left-most free square.
 - The mine counter is mines less flags and goes negative. The timer starts on the first click, at 1, and stops at 999.

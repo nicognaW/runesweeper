@@ -15,7 +15,7 @@ use rune::AppSpec;
 use storage::Saved;
 
 fn scene(level: Level, seed: u64) -> App {
-    let saved = Saved { level, ..Saved::default() };
+    let saved = Saved { level, played: true, ..Saved::default() };
     App::with(saved, seed)
 }
 
@@ -68,6 +68,7 @@ const SCENES: &[(&str, fn(&mut App))] = &[
             }
         }
         a.seconds = 37;
+        a.new_best = true;
         a.moments.won = Some(0.05);
     }),
     ("menu", |a| {
@@ -81,6 +82,10 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     ("best", |a| {
         *a = scene(Level::Beginner, 7);
         a.dialog = Some(app::Dialog::BestTimes);
+    }),
+    ("first-run", |a| {
+        *a = scene(Level::Beginner, 7);
+        a.saved.played = false;
     }),
     ("icon", |a| {
         *a = scene(Level::Beginner, 7);
@@ -107,7 +112,9 @@ pub fn spec() -> AppSpec<App> {
 fn initial_size() -> (f32, f32) {
     let saved = storage::load();
     let (w, h, _) = saved.level.dims().unwrap_or(saved.custom);
-    style::window_size(w, h)
+    let (ww, wh) = style::window_size(w, h);
+    // Room for the how-to-play lines under the console the first time.
+    (ww, if saved.played { wh } else { wh + 48.0 })
 }
 
 /// Effects off: `--plain` on desktop, `?plain` on the web (for GPUs that struggle).

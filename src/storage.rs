@@ -8,6 +8,8 @@ pub struct Saved {
     pub custom: (usize, usize, usize),
     pub marks: bool,
     pub color: bool,
+    /// Set after the first square is ever opened: the first-run hint stops showing.
+    pub played: bool,
     /// Best times (seconds) and names for Beginner, Intermediate and Expert.
     pub best: [(u32, String); 3],
 }
@@ -19,6 +21,7 @@ impl Default for Saved {
             custom: (9, 9, 10),
             marks: true,
             color: true,
+            played: false,
             best: std::array::from_fn(|_| (999, "Anonymous".to_string())),
         }
     }
@@ -47,6 +50,7 @@ impl Saved {
                 }
                 "marks" => s.marks = v.trim() == "1",
                 "color" => s.color = v.trim() == "1",
+                "played" => s.played = v.trim() == "1",
                 k if k.starts_with("best") => {
                     let Ok(i) = k[4..].parse::<usize>() else { continue };
                     let Some((t, name)) = v.split_once(',') else { continue };
@@ -68,7 +72,7 @@ impl Saved {
             Level::Custom => "custom",
         };
         let (w, h, m) = self.custom;
-        let mut out = format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\n", self.marks as u8, self.color as u8);
+        let mut out = format!("level={level}\ncustom={w},{h},{m}\nmarks={}\ncolor={}\nplayed={}\n", self.marks as u8, self.color as u8, self.played as u8);
         for (i, (t, name)) in self.best.iter().enumerate() {
             out += &format!("best{i}={t},{}\n", name.replace('\n', " "));
         }

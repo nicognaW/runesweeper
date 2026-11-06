@@ -15,12 +15,13 @@ fn kit(p: &Palette) -> Kit {
     k
 }
 
-fn led(key: &str, v: i32, p: &Palette, color: bool) -> El {
+fn led(key: &str, v: i32, p: &Palette, color: bool, gold: bool) -> El {
     let (dw, dh) = (17.0, 30.0);
     // Digits change in the frame they change, as an LED does.
     let mut digits = row().gap(4.0).motion_intent(MotionIntent::STEP);
     for ch in led_text(v).chars() {
-        digits = digits.child(digit(ch, dw, dh, p.led_on, p.led_off));
+        let (on, off) = if gold { (c(0xffc531), ca(0xffc531, 0.09)) } else { (p.led_on, p.led_off) };
+        digits = digits.child(digit(ch, dw, dh, on, off));
     }
     let (w, h) = (3.0 * dw + 8.0 + 16.0, dh + 12.0);
     el().key(key)
@@ -30,7 +31,7 @@ fn led(key: &str, v: i32, p: &Palette, color: bool) -> El {
         .box_shadow(inset(1.5, 6.0, ca(0x000000, 0.9)))
         .box_shadow(drop(-1.0, 0.0, ca(0xffffff, 0.06)))
         .center()
-        .child(effect(gfx::LED).effect_data([if color { 7.0 } else { 4.0 }, 0.16, 5.0, 0.0]).absolute(6.0, 6.0).size(w - 12.0, h - 12.0).radius(4.0))
+        .child(effect(gfx::LED).effect_data([if gold { 0.0 } else if color { 7.0 } else { 4.0 }, 0.16, 5.0, 0.0]).absolute(6.0, 6.0).size(w - 12.0, h - 12.0).radius(4.0))
         .child(digits)
         .role("status")
         .label(format!("{key}: {v}"))
@@ -57,7 +58,9 @@ fn face_button(s: &App, p: &Palette) -> El {
                 .box_shadow(drop(2.0, 6.0, ca(0x000000, 0.6)))
                 .child(effect(gfx::FACE).effect_data([if s.saved.color { 0.0 } else { 5.0 }, 0.0, 0.0, 0.0]).absolute(0.0, 0.0).size(sz, sz).radius(sz / 2.0))
                 // The expression swaps in the frame it changes, as the original's does.
-                .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT)),
+                .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT))
+                // A win: one burst of stars off the face (rare, so it gets the delight budget).
+                .children(s.moments.won.map(|t| effect(gfx::SPARKLES).key(format!("face-burst{}", s.field)).effect_data([t as f32 + 0.15, 8.0, 7.0, 0.0]).effect_bleed(36.0).absolute(0.0, 0.0).size(sz, sz).inert())),
         )
         .hover(p.tile_hover)
 }
@@ -72,11 +75,11 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .box_shadow(inset(1.0, 5.0, ca(0x000000, 0.6)))
         .box_shadow(inset(-1.0, 0.0, ca(0xffffff, 0.05)))
         .center_y()
-        .child(led("Mines", s.game.counter(), p, s.saved.color))
+        .child(led("Mines", s.game.counter(), p, s.saved.color, false))
         .child(spacer())
         .child(face_button(s, p))
         .child(spacer())
-        .child(led("Time", s.seconds as i32, p, s.saved.color))
+        .child(led("Time", s.seconds as i32, p, s.saved.color, s.new_best && s.game.status == Status::Won))
 }
 
 fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
@@ -154,6 +157,13 @@ fn menu_bar(s: &App, k: &Kit, p: &Palette, layer: &mut Vec<El>) -> El {
         .child(game)
         .child(help)
         .child(spacer())
+        .children(touch_first().then(|| {
+            Button::new(if s.flag_mode { "Flagging" } else { "Flag" })
+                .variant(if s.flag_mode { ButtonVariant::Contrast } else { ButtonVariant::Ghost })
+                .help("Taps place flags (F on a keyboard)")
+                .on_press(|s: &mut App| s.flag_mode = !s.flag_mode)
+                .build(k)
+        }))
         .child(text(s.level.name()).font(SMALL).color(p.muted).mr(8.0))
 }
 
@@ -306,7 +316,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
         .child(header(s, &p, inner_w))
-        .child(board_el);
+        .child(board_el)
+        // Out of the layout, so the console doesn't move when it goes.
+        .children(hint(s, &p).map(|h| {
+            col().key("hint")
+                .absolute(0.0, console_h + 12.0)
+                .w(console_w)
+                .items_center()
+                .child(h)
+                .transition(rune::Transition::opacity().springs(rune_motion::SpringPair::new(rune::Spring::new(0.2, 0.0), rune::Spring::new(0.2, 0.0))))
+        }));
     if s.moments.won.is_some() {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, 0.0, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
@@ -336,9 +355,26 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .child(body)
         .child(effect(gfx::GRAIN).key("grain").absolute(0.0, 0.0).w_full().h_full().inert())
         .child(shock)
-        .children(cheat)
-        .on_key(|s: &mut App, e, tx| s.key(e, tx));
+        .children(cheat);
     rune_kit::root(base, layer)
+}
+
+/// Builds with no right button to lean on (the web, which phones use) show the flag toggle.
+fn touch_first() -> bool {
+    cfg!(target_arch = "wasm32")
+}
+
+/// The first time, a line of how to play under the console, until the first square opens.
+fn hint(s: &App, p: &Palette) -> Option<El> {
+    if s.saved.played || s.icon {
+        return None;
+    }
+    let (a, b) = if touch_first() {
+        ("Tap opens  ·  Flag, then tap, marks a mine", "Tap a number whose flags are placed to open around it")
+    } else {
+        ("Left click opens  ·  Right click flags", "Both buttons on a number open around it")
+    };
+    Some(col().items_center().gap(3.0).child(text(a).font(SMALL).color(p.text.alpha(0.8))).child(text(b).font(SMALL).color(p.muted)))
 }
 
 trait Pad {

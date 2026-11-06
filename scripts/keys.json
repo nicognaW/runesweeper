@@ -1,0 +1,10 @@
+{"events": [
+  {"t": 0.4, "type": "key", "name": "Down"},
+  {"t": 0.5, "type": "key", "name": "Left"},
+  {"t": 0.6, "type": "type", "text": " "},
+  {"t": 1.2, "type": "key", "name": "Up"},
+  {"t": 1.3, "type": "key", "name": "Up"},
+  {"t": 1.4, "type": "type", "text": "f"},
+  {"t": 1.9, "type": "key", "name": "F2"},
+  {"t": 2.4, "type": "mark", "name": "end"}
+]}

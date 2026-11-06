@@ -72,10 +72,14 @@ pub struct App {
     /// XYZZY, then Shift+Enter: the corner pixel tells mine from safe under the pointer.
     pub xyzzy: usize,
     pub cheat: bool,
+    /// Touch screens have no right button: while on, a tap flags (a tap on a number chords).
+    pub flag_mode: bool,
     /// Whether this field deals its tiles in (not when a key asked for it).
     pub deal: bool,
     /// The last win beat the level's best time.
     pub new_best: bool,
+    /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
+    pub banner_done: bool,
     /// Draw the app icon instead of the game (the `icon` scene).
     pub icon: bool,
     pub edit_w: TextEdit,
@@ -114,7 +118,9 @@ impl App {
             cheat: false,
             icon: false,
             deal: true,
+            flag_mode: false,
             new_best: false,
+            banner_done: false,
             edit_w: TextEdit::new(""),
             edit_h: TextEdit::new(""),
             edit_m: TextEdit::new(""),
@@ -145,6 +151,7 @@ impl App {
         self.seconds = 0;
         self.press = Press::default();
         self.new_best = false;
+        self.banner_done = false;
         self.moments = Moments::default();
     }
 
@@ -190,6 +197,11 @@ impl App {
     /// A release on the board.
     fn release(&mut self, chord: bool, cell: Option<usize>) {
         let Some(i) = cell else { return };
+        if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
+            self.game.mark(i, self.saved.marks);
+            return;
+        }
+        let chord = chord || (self.flag_mode && self.game.cells[i].cover == Cover::Open);
         self.release_at(chord, i);
         // The selector hides over what just opened.
         let shown = !self.game.over() && self.game.cells[i].cover != Cover::Open;
@@ -198,6 +210,10 @@ impl App {
 
     fn release_at(&mut self, chord: bool, i: usize) {
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
+        if out != Outcome::Nothing && !self.saved.played {
+            self.saved.played = true;
+            storage::save(&self.saved);
+        }
         self.start_clock();
         match out {
             Outcome::Nothing | Outcome::Opened(_) => {}
@@ -329,8 +345,19 @@ impl App {
         }
     }
 
+    /// When the result banner leaves after the game ends.
+    pub const BANNER_FOR: f64 = 3.0;
+
     pub fn tick(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.now = now;
+        let ended = self.moments.won.or(self.moments.boom.map(|(t, _)| t));
+        if let Some(t) = ended.filter(|_| !self.banner_done) {
+            if now - t >= Self::BANNER_FOR {
+                self.banner_done = true;
+                return true;
+            }
+            tx.wake_after(Duration::from_secs_f64((t + Self::BANNER_FOR - now).max(0.01)));
+        }
         let Some(t0) = self.started_at else { return false };
         if self.game.status != Status::Playing {
             return false;
@@ -345,8 +372,45 @@ impl App {
         false
     }
 
+    /// Arrow keys move the selector a square at a time, at once (keys never animate).
+    fn step(&mut self, dx: isize, dy: isize, tx: &mut Tx) {
+        let (w, h) = (self.game.w as isize, self.game.h as isize);
+        let i = self.hover_cell.unwrap_or(self.game.idx(self.game.w / 2, self.game.h / 2));
+        let (x, y) = ((i as isize % w + dx).clamp(0, w - 1), (i as isize / w + dy).clamp(0, h - 1));
+        self.hover(Some((y * w + x) as usize), tx);
+    }
+
     pub fn key(&mut self, e: &KeyEvent, tx: &mut Tx) -> bool {
+        let plain = !e.mods.cmd && !e.mods.ctrl && !e.mods.alt;
         match &e.key {
+            Key::Up if plain => {
+                self.step(0, -1, tx);
+                true
+            }
+            Key::Down if plain => {
+                self.step(0, 1, tx);
+                true
+            }
+            Key::Left if plain => {
+                self.step(-1, 0, tx);
+                true
+            }
+            Key::Right if plain => {
+                self.step(1, 0, tx);
+                true
+            }
+            // Space opens the selected square, or chords on a number.
+            Key::Text(t) if plain && t == " " && self.hover_cell.is_some() => {
+                let i = self.hover_cell.unwrap();
+                let chord = self.game.cells[i].cover == Cover::Open;
+                self.release(chord, Some(i));
+                true
+            }
+            Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() => {
+                let i = self.hover_cell.unwrap();
+                self.game.mark(i, self.saved.marks);
+                true
+            }
             Key::Function(2) => {
                 self.new_game_now();
                 true
@@ -392,6 +456,22 @@ impl Default for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flag_mode_flags_on_a_tap_and_chords_on_a_number() {
+        let mut a = App::with(Saved { played: true, ..Saved::default() }, 3);
+        let safe = (0..a.game.cells.len()).find(|&i| !a.game.cells[i].mine && a.game.cells[i].adj > 0).unwrap();
+        a.release(false, Some(safe));
+        assert_eq!(a.game.cells[safe].cover, Cover::Open);
+        a.flag_mode = true;
+        let hidden = (0..a.game.cells.len()).find(|&i| a.game.cells[i].cover == Cover::Hidden).unwrap();
+        a.release(false, Some(hidden));
+        assert_eq!(a.game.cells[hidden].cover, Cover::Flag, "a tap flags");
+        let opened = a.game.opened;
+        a.release(false, Some(safe));
+        assert!(a.game.opened >= opened, "a tap on a number chords, never flags it");
+        assert_eq!(a.game.cells[safe].cover, Cover::Open);
+    }
 
     #[test]
     fn hit_testing_maps_points_to_cells() {

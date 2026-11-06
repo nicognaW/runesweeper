@@ -4,6 +4,7 @@
 //! dealing, lifting off and the win wave are one element changing its sequence, never a swap.
 
 use rune::{Beat, Color, Cursor, El, MotionIntent, PointerButton, Sequence, Spring, Transition, effect, el, text};
+use rune_motion::Easing;
 
 use crate::app::App;
 use crate::game::{Cover, Status};
@@ -11,18 +12,22 @@ use crate::gfx;
 use crate::icons::{cross, flag, mine};
 use crate::style::*;
 
-/// A tile winding up, then lifting off as its cell opens.
-const VANISH: &[Beat] = &[Beat::new(0.0), Beat::new(0.06).scale(1.08), Beat::new(0.24).opacity(0.0).scale(0.45)];
-/// What was under it popping up.
-const POP: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.35), Beat::new(0.17).scale(1.18), Beat::new(0.3)];
-/// A new field dealing its tiles in.
-const DEAL: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.17).scale(1.06), Beat::new(0.25)];
-/// The win: a swell that runs across the field.
-const WAVE: &[Beat] = &[Beat::new(0.0), Beat::new(0.14).scale(1.22), Beat::new(0.36)];
+/// Emil Kowalski's strong ease-out: for everything entering or leaving.
+const OUT: Easing = Easing::cubic(0.23, 1.0, 0.32, 1.0);
+/// A tile lifting off as its cell opens: a quick swell, then gone (240 ms).
+const VANISH: &[Beat] = &[Beat::new(0.0), Beat::new(0.06).scale(1.06).easing(OUT), Beat::new(0.24).opacity(0.0).scale(0.85).easing(OUT)];
+/// A mine coming up as the chain reaches it (220 ms).
+const POP: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.22).easing(Easing::OVERSHOOT)];
+/// A new field dealing its tiles in (220 ms each).
+const DEAL: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.8), Beat::new(0.22).easing(OUT)];
+/// The win: a swell that runs across the field (rare: the delight budget).
+const WAVE: &[Beat] = &[Beat::new(0.0), Beat::new(0.14).scale(1.2).easing(OUT), Beat::new(0.36).easing(Easing::EASE_IN_OUT)];
 /// Fades on frequent surfaces: 150 ms in and out.
 const QUICK: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.15, 0.0));
-/// A mine going off: the flash behind it.
-const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.4), Beat::new(0.06).scale(1.35), Beat::new(0.3).opacity(0.3).scale(1.0)];
+/// A mine going off: the flash behind it (300 ms).
+const FLASH: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.06).scale(1.3).easing(OUT), Beat::new(0.3).opacity(0.3).scale(1.0).easing(OUT)];
+/// The result banner: in quick, out a little slower once it's been read.
+const BANNER: rune_motion::SpringPair = rune_motion::SpringPair::new(Spring::new(0.15, 0.0), Spring::new(0.25, 0.0));
 
 pub fn size(s: &App) -> (f32, f32) {
     (s.game.w as f32 * PITCH - GAP + 2.0 * WELL, s.game.h as f32 * PITCH - GAP + 2.0 * WELL)
@@ -126,7 +131,7 @@ pub fn view(s: &App, reduced: bool) -> El {
                         TILE * 0.8,
                         [(0.0, c(0xfff1c2).alpha(0.95)), (0.35, c(0xff7a1a).alpha(0.7)), (1.0, c(0xff2d2d).alpha(0.0))],
                     );
-                    cell = cell.child(with_seq(blast, FLASH, d, reduced).motion_intent(MotionIntent::KICK | MotionIntent::PULSE).inert());
+                    cell = cell.child(with_seq(blast, FLASH, d, reduced).motion_intent(MotionIntent::KICK | MotionIntent::PULSE | MotionIntent::CUT).inert());
                 }
                 let ink = if is_hit { c(0x14060a) } else { p.mine_ink() };
                 let m = mine(TILE * 0.78, ink);
@@ -215,11 +220,11 @@ pub fn view(s: &App, reduced: bool) -> El {
             .radius(12.0)
             .inert(),
     );
-    board.children(banner(s, &p, bw, bh))
+    board.children(banner(s, &p, bw, bh, reduced))
 }
 
 /// The line that says how it went, over the bottom of the field.
-fn banner(s: &App, p: &Palette, bw: f32, bh: f32) -> Option<El> {
+fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
     let (title, sub, tint, delay) = match s.game.status {
         Status::Won => (
             format!("Cleared in {} second{}", s.seconds, if s.seconds == 1 { "" } else { "s" }),
@@ -230,11 +235,15 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32) -> Option<El> {
         Status::Lost => ("Boom.".to_string(), "F2 or the face to try again".to_string(), c(0xff5c6c), 0.35),
         _ => return None,
     };
-    let w = (bw - 24.0).min(260.0);
-    Some(
-        el().key(format!("banner{}", s.field))
-            .absolute((bw - w) / 2.0, bh - 76.0)
-            .size(w, 60.0)
+    if s.banner_done {
+        return None;
+    }
+    let w = (bw - 16.0).min(270.0);
+    let banner = el()
+            .key(format!("banner{}", s.field))
+            // Over the field's bottom edge, so it covers as little of it as it can.
+            .absolute((bw - w) / 2.0, bh - 26.0)
+            .size(w, 50.0)
             .radius(14.0)
             .fill(ca(0x0b0e19, 0.72))
             .backdrop_blur(10.0)
@@ -248,10 +257,8 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32) -> Option<El> {
                     .child(text(title).font(UI_BOLD).color(tint))
                     .child(text(sub).font(SMALL).color(p.muted)),
             )
-            .enter_delay(delay)
-            .transition(Transition::opacity().springs(QUICK))
-            .inert(),
-    )
+            .inert();
+    Some(if reduced { banner } else { banner.enter_delay(delay).transition(Transition::opacity().springs(BANNER)) })
 }
 
 impl Palette {
