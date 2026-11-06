@@ -74,7 +74,7 @@ release; tagged versions are on [Releases](https://github.com/nicognaW/runesweep
 | Windows 10/11 (x64) | `runesweeper-windows-x86_64.zip` | Unzip, run `runesweeper.exe`. SmartScreen may warn on an unsigned app: *More info → Run anyway*. |
 | macOS 12+ (Apple silicon and Intel) | `runesweeper-macos-universal.dmg` | Open, drag Runesweeper to Applications. First launch: right-click the app → *Open* (it is not notarized). |
 | Linux (x64) | `runesweeper-linux-x86_64.tar.gz` | `tar xzf runesweeper-linux-x86_64.tar.gz && ./runesweeper-linux-x86_64/install-linux.sh`, or run `./runesweeper` in place. Needs Vulkan and `libxkbcommon-x11`. |
-| Web | [nicognaw.github.io/runesweeper](https://nicognaw.github.io/runesweeper/) or `runesweeper-web.zip` | Needs WebGPU (recent Chrome or Edge; Safari 26+). Serve the zip's folder over HTTPS or `localhost`. |
+| Web | [runesweeper.nkk.sh](https://runesweeper.nkk.sh), [nicognaw.github.io/runesweeper](https://nicognaw.github.io/runesweeper/) or `runesweeper-web.zip` | Needs WebGPU (recent Chrome or Edge; Safari 26+). Serve the zip's folder over HTTPS or `localhost`. |
 
 ## Play
 
@@ -105,13 +105,11 @@ Rust 1.97 or newer.
 cargo run --release
 ```
 
-Linux needs `libxkbcommon-dev libwayland-dev` to build. The web build uses Rune's script
-(clone Rune at the rev in `Cargo.toml`):
+Linux needs `libxkbcommon-dev libwayland-dev` to build. The web build installs what it needs
+(the wasm target, the matching `wasm-bindgen` CLI, Rune's build script) and writes `dist/web`:
 
 ```sh
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version <version in Cargo.lock> --locked
-path/to/rune/scripts/web-build.sh runesweeper --out dist/web --no-html && cp web/index.html dist/web/
+scripts/web-build.sh
 ```
 
 ### Headless
