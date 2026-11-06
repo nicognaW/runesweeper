@@ -110,6 +110,7 @@ fn record_row(s: &App, i: usize, r: &Record, p: &Palette) -> El {
         End::Lost => (S::LostGame, if s.saved.color { c(0xff5c6c) } else { p.text }),
         End::Abandoned => (S::Abandoned, p.muted),
     };
+    // A press reviews the game.
     col()
         .key(format!("history-row-{i}"))
         .w_full()
@@ -117,6 +118,12 @@ fn record_row(s: &App, i: usize, r: &Record, p: &Palette) -> El {
         .px(10.0)
         .gap(2.0)
         .justify_center()
+        .radius(8.0)
+        .role("button")
+        .label(s.tr(S::Review))
+        .focusable(true)
+        .hover(p.tile_hover)
+        .on_press(move |s: &mut App| s.open_review(i))
         .child(
             row()
                 .w_full()

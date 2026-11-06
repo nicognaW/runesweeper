@@ -10,6 +10,7 @@ use crate::generate::{self, Stream};
 use crate::generating::{self, Generating, Lay};
 use crate::icons::Mood;
 use crate::record::{self, Act, End, Layout, Move, Record};
+use crate::review::Review;
 use crate::solver::play;
 use crate::storage::{self, Saved};
 use crate::strings::{Lang, S};
@@ -126,6 +127,9 @@ pub struct App {
     pub utc_offset: i64,
     /// The Hint on screen and how far into it the player has stepped. Any move clears it.
     pub hint: Option<Shown>,
+    /// A game being reviewed: its field is drawn instead of the game in play, which waits,
+    /// untouched, and takes no input until the review is left.
+    pub review: Option<Review>,
     /// The result banner has had its moment (it leaves on a timer, so its wait draws nothing).
     pub banner_done: bool,
     /// The shockwave has run; its full-window backdrop copy can go.
@@ -205,6 +209,7 @@ impl App {
             history_filter: (Mode::Classic, level),
             utc_offset: storage::utc_offset_minutes(),
             hint: None,
+            review: None,
             banner_done: false,
             shock_done: false,
             edit_w: TextEdit::new(""),
@@ -333,6 +338,7 @@ impl App {
     fn fresh_field(&mut self) {
         self.abandon();
         self.hint = None;
+        self.review = None;
         self.lay_new_field();
         self.field += 1;
         self.started_at = None;
@@ -361,11 +367,16 @@ impl App {
         tx.resize_window(window_size(self.game.w, self.game.h));
     }
 
+    /// The field the board draws: a review's, else the game in play.
+    pub fn shown(&self) -> &Game {
+        self.review.as_ref().map_or(&self.game, |r| &r.game)
+    }
+
     pub fn mood(&self) -> Mood {
-        if self.generating.is_some() {
+        if self.generating.is_some() && self.review.is_none() {
             return Mood::Think;
         }
-        match self.game.status {
+        match self.shown().status {
             Status::Won => Mood::Cool,
             Status::Lost => Mood::Dead,
             _ if self.press.left || self.press.middle => Mood::Oh,
@@ -407,8 +418,8 @@ impl App {
 
     /// A right click on cell `i`.
     pub fn mark_at(&mut self, i: usize) {
-        // A field being generated takes no input.
-        if self.game.over() || self.generating.is_some() {
+        // A field being generated takes no input, nor one waiting out a review.
+        if self.game.over() || self.generating.is_some() || self.review.is_some() {
             return;
         }
         self.note(Act::Mark { marks: self.saved.marks }, i);
@@ -479,8 +490,8 @@ impl App {
     /// A release on the board.
     fn release(&mut self, chord: bool, cell: Option<usize>) {
         let Some(i) = cell else { return };
-        // A field being generated takes no input.
-        if self.generating.is_some() {
+        // A field being generated takes no input, nor one waiting out a review.
+        if self.generating.is_some() || self.review.is_some() {
             return;
         }
         if self.flag_mode && !chord && self.game.cells[i].cover != Cover::Open {
@@ -747,6 +758,25 @@ impl App {
 
     pub fn key(&mut self, e: &KeyEvent, tx: &mut Tx) -> bool {
         let plain = !e.mods.cmd && !e.mods.ctrl && !e.mods.alt;
+        // A review: the arrows step through its moves, Escape leaves it, and the play keys
+        // wait (keys never animate).
+        if self.review.is_some() {
+            match &e.key {
+                Key::Left | Key::Right if plain => {
+                    self.review_step(if e.key == Key::Left { -1 } else { 1 });
+                    tx.instant();
+                    return true;
+                }
+                Key::Escape if self.panel.is_none() => {
+                    self.leave_review();
+                    tx.instant();
+                    return true;
+                }
+                Key::Up | Key::Down => return true,
+                Key::Text(t) if plain && [" ", "f", "h"].contains(&t.to_ascii_lowercase().as_str()) => return true,
+                _ => {}
+            }
+        }
         match &e.key {
             Key::Up if plain => {
                 self.step(0, -1, tx);

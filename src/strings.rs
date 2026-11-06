@@ -116,6 +116,26 @@ strings! {
     ForcedGuesses: "{} forced, {} survived", "必须猜 {} 次，猜对 {} 次";
     Assisted1: "Assisted, 1 hint", "使用提示 1 次";
     Assisted: "Assisted, {} hints", "使用提示 {} 次";
+    // Review (复盘): the timeline under the field and its markers' callout. Reasons come
+    // from the hint's own wording; nothing here gives a probability either.
+    Review: "Review", "复盘";
+    ReviewLeave: "Leave review", "退出复盘";
+    ReviewPrev: "Previous move", "上一步";
+    ReviewNext: "Next move", "下一步";
+    ReviewTimeline: "Moves", "步骤";
+    ReviewMove: "Move {} of {}", "第 {} / {} 步";
+    ReviewStats: "3BV {} · 3BV/s {} · Efficiency {}", "3BV {} · 3BV/s {} · 效率 {}";
+    ReviewClean: "Nothing to point out.", "没有需要指出的地方。";
+    MarkNeedless: "Needless guess", "不必要的猜雷";
+    MarkMissed: "Missed deduction", "错过的推理";
+    MarkForced: "Forced guess", "必须猜";
+    MarkChord: "A chord saves clicks", "双击可省点击";
+    SumNeedless: "You opened a cell nothing proved, while a safe cell could be proven.", "这一步猜了一格，其实这时已经能推出安全格。";
+    SumMissed: "You paused {} here, while a safe cell could be proven.", "你在这里停了 {}，其实这时已经能推出安全格。";
+    SumForced: "No cell could be proven safe: the guess was forced, but not a true 50/50.", "推不出任何安全格，只能猜，但这不是死猜。";
+    SumForcedFifty: "No cell could be proven safe: the guess was forced, a true 50/50.", "推不出任何安全格，只能猜：这是死猜。";
+    ChordReason1: "This {} has its {} flagged, so the cells left around it are safe. One chord on it opens them all: 1 click saved.", "看这个 {}，它周围的 {}都已标好……所以剩下的格子都安全。在它上面双击一次就能全部打开，省下 1 次点击。";
+    ChordReason: "This {} has its {} flagged, so the cells left around it are safe. One chord on it opens them all: {} clicks saved.", "看这个 {}，它周围的 {}都已标好……所以剩下的格子都安全。在它上面双击一次就能全部打开，省下 {} 次点击。";
     // Hints (ADR 0002: reasons a player can check by hand, never a probability). The zh-CN
     // sentences follow the tutorials' 「看这个 N，它周围还有 M 个雷……所以这一格必定安全」.
     Hint: "Hint", "提示";

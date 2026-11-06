@@ -74,6 +74,25 @@ pub struct Move {
     pub cell: usize,
 }
 
+impl Move {
+    /// Plays the click on `g`, as the game did.
+    pub fn apply(&self, g: &mut Game) {
+        match self.act {
+            Act::Open => {
+                g.start();
+                g.open(self.cell);
+            }
+            Act::Chord => {
+                g.start();
+                g.chord(self.cell);
+            }
+            Act::Mark { marks } => {
+                g.mark(self.cell, marks);
+            }
+        }
+    }
+}
+
 /// Where the field's mines came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Layout {
@@ -143,27 +162,21 @@ impl Record {
 
     /// The field at the end of the game, rebuilt from its layout and moves.
     pub fn replay(&self) -> Game {
-        let (w, h, _) = self.dims;
-        let mut g = match &self.layout {
-            Layout::Mines(m) => Game::with_mines(w, h, m),
-            Layout::Seeded { seed, first } => generate::lay(self.mode, self.dims, *seed, *first),
-        };
+        let mut g = self.base();
         for m in &self.moves {
-            match m.act {
-                Act::Open => {
-                    g.start();
-                    g.open(m.cell);
-                }
-                Act::Chord => {
-                    g.start();
-                    g.chord(m.cell);
-                }
-                Act::Mark { marks } => {
-                    g.mark(m.cell, marks);
-                }
-            }
+            m.apply(&mut g);
         }
         g
+    }
+
+    /// The field as laid, before any click: Classic's mines as dealt, the new modes' laid
+    /// from the seed and first click.
+    pub fn base(&self) -> Game {
+        let (w, h, _) = self.dims;
+        match &self.layout {
+            Layout::Mines(m) => Game::with_mines(w, h, m),
+            Layout::Seeded { seed, first } => generate::lay(self.mode, self.dims, *seed, *first),
+        }
     }
 
     /// The record as one line, without its newline.
