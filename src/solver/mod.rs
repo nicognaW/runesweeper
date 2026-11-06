@@ -3,9 +3,11 @@
 //! the numbers; the generators, the hint and the benchmark all build on it.
 
 pub mod bench;
+pub mod dead;
 pub mod exact;
 pub mod fifty;
 pub mod play;
+pub mod relocation;
 
 use crate::game::{Cover, Game};
 

@@ -246,3 +246,22 @@ fn records_count_hints_and_mark_the_game_assisted() {
     // A game without hints is not assisted.
     assert!(!crate::record::Record::new(crate::game::Mode::Classic, (9, 9, 10)).assisted());
 }
+
+#[test]
+fn early_in_classic_a_cell_to_avoid_has_no_apply() {
+    use crate::record::{Act, Move};
+    // The first click in the middle opened only its 1 (see the guess fixtures).
+    let mut rt = runtime(Saved::default());
+    on(&mut rt, &["####*#", "######", "##.##*", "###*##", "*####*"]);
+    rt.update(|s, _| s.record.moves.push(Move { ms: 0, act: Act::Open, cell: 14 }));
+    for _ in 0..4 {
+        hint_key(&mut rt);
+    }
+    settle(&mut rt);
+    let h = &rt.state.hint.as_ref().unwrap().hint;
+    assert_eq!(h.target.map(|t| (t.cell, t.verdict)), Some((0, Verdict::Avoid)));
+    assert!(text_in(&rt, "hint-callout").contains("Avoid it."), "{}", text_in(&rt, "hint-callout"));
+    assert!(!shown(&rt, "hint-apply"), "nothing to apply");
+    rt.update(|s, _| s.apply_hint());
+    assert_eq!(rt.state.game.cells[0].cover, Cover::Hidden);
+}

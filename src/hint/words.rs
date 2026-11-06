@@ -2,7 +2,7 @@
 //! word). English avoids coordinates: the callout highlights what "this" and "that" are.
 //! Nothing here, or anywhere in a hint, gives a probability (ADR 0002).
 
-use super::{Bound, Grade, Hint, Pattern, Step, Technique, Verdict};
+use super::{Bound, Grade, Guess, Hint, Pattern, Step, Technique, Verdict};
 use crate::strings::{Lang, S};
 
 /// "1 mine", "3 mines" (zh-CN: "3 个雷").
@@ -28,6 +28,16 @@ pub fn name(t: Technique, lang: Lang) -> &'static str {
         Technique::Count => S::TechCount,
         Technique::Combinations => S::TechCombinations,
         Technique::Nothing => S::TechNothing,
+        Technique::Guess(g) => match g {
+            Guess::FiftyFifty => S::TechFiftyFifty,
+            Guess::Pseudo => S::TechPseudo,
+            Guess::Dead => S::TechDead,
+            Guess::Ways => S::TechWays,
+            Guess::Fewer => S::TechFewer,
+            Guess::Opening => S::TechOpening,
+            Guess::TopLeft => S::TechTopLeft,
+            Guess::Blind => S::TechBlind,
+        },
     }
     .get(lang)
 }
@@ -116,6 +126,16 @@ pub fn nudge(h: &Hint, lang: Lang) -> &'static str {
         Technique::Count => S::NudgeCount,
         Technique::Combinations => S::NudgeCombinations,
         Technique::Nothing => S::NudgeNothing,
+        Technique::Guess(g) => match g {
+            Guess::FiftyFifty => S::NudgeFiftyFifty,
+            Guess::Pseudo => S::NudgePseudo,
+            Guess::Dead => S::NudgeDead,
+            Guess::Ways => S::NudgeWays,
+            Guess::Fewer => S::NudgeFewer,
+            Guess::Opening => S::NudgeOpening,
+            Guess::TopLeft => S::NudgeTopLeft,
+            Guess::Blind => S::NudgeBlind,
+        },
     }
     .get(lang)
 }
@@ -132,6 +152,8 @@ pub fn verdict(h: &Hint, lang: Lang) -> Option<&'static str> {
             Verdict::Safe => S::CellSafe,
             Verdict::Mine => S::CellMine,
             Verdict::WrongFlag => S::CellWrongFlag,
+            Verdict::Guess => S::CellGuess,
+            Verdict::Avoid => S::CellAvoid,
         }
         .get(lang),
     )
@@ -174,5 +196,17 @@ fn step(s: &Step, last: bool, lang: Lang) -> String {
         Step::CountRest { left, held, numbers } => if numbers == 1 { S::StepCountRest1 } else { S::StepCountRest }.fill(lang, &[&mines(lang, left), &mines(lang, held)]),
         Step::CountOver { need, left } => S::StepCountOver.fill(lang, &[&mines(lang, need), &mines(lang, left)]),
         Step::CountUnder { most, left } => S::StepCountUnder.fill(lang, &[&mines(lang, most), &mines(lang, left)]),
+        Step::FiftyFifty { .. } => S::StepFiftyFifty.get(lang).to_string(),
+        Step::Announced { count: 1 } => S::StepAnnounced1.get(lang).to_string(),
+        Step::Announced { count } => S::StepAnnounced.fill(lang, &[&count]),
+        Step::Pseudo { .. } => S::StepPseudo.get(lang).to_string(),
+        Step::Dead { shows, .. } => S::StepDead.fill(lang, &[&shows]),
+        Step::Ways { n: Some(n), ways, mine_in } => S::StepWaysOne.fill(lang, &[&n, &ways, &mine_in]),
+        Step::Ways { n: None, ways, mine_in } => S::StepWaysMany.fill(lang, &[&ways, &mine_in]),
+        Step::Fewer { least, away } => S::StepFewer.fill(lang, &[&mines(lang, least), &self::cells(lang, away)]),
+        Step::FewerSafe { least } => S::StepFewerSafe.fill(lang, &[&mines(lang, least)]),
+        Step::Opening { neighbours, hidden, mines: m } => S::StepOpening.fill(lang, &[&self::cells(lang, hidden), &mines(lang, m), &neighbours]),
+        Step::TopLeft => S::StepTopLeft.get(lang).to_string(),
+        Step::NotTopLeft { .. } => S::StepNotTopLeft.get(lang).to_string(),
     }
 }

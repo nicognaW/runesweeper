@@ -141,3 +141,38 @@ fn a_loss_elsewhere_is_not_called_forced() {
     assert_eq!(rt.state.game.status, Status::Lost);
     assert_eq!(banner(&rt), format!("Boom. Forced 50/50s survived: 0 of {k}"));
 }
+
+#[test]
+fn at_a_stall_the_hint_says_the_fifty_fifty_was_announced_and_apply_takes_it() {
+    use crate::hint::{Guess, Step, Technique, Verdict};
+    let mut rt = runtime(max_guess(Level::Beginner));
+    let want = laid(&mut rt);
+    let k = want.fifty_fifties.len();
+    // Play every deduction the hint gives until the first stall.
+    for _ in 0..200 {
+        rt.update(|s, _| s.press_hint());
+        let h = rt.state.hint.as_ref().expect("a hint").hint.clone();
+        if h.technique == Technique::Guess(Guess::FiftyFifty) {
+            let t = h.target.expect("a cell");
+            assert_eq!(t.verdict, Verdict::Guess);
+            let pair = want.fifty_fifties.iter().find(|&&(a, b)| a == t.cell || b == t.cell).expect("one of the announced");
+            assert!(h.steps.contains(&Step::Announced { count: k }), "{h:?}");
+            rt.update(|s, _| (0..3).for_each(|_| s.press_hint()));
+            settle(&mut rt);
+            let words = text_in(&rt, "hint-callout");
+            let said = if k == 1 { "This is the 50/50 this field was built with.".to_string() } else { format!("This is one of the {k} 50/50s this field was built with.") };
+            assert!(words.contains(&said), "{words}");
+            rt.update(|s, _| s.apply_hint());
+            let c = &rt.state.game.cells[t.cell];
+            assert!(c.cover == Cover::Open || rt.state.game.status == Status::Lost, "Apply took the guess");
+            assert!(pair.0 == t.cell || pair.1 == t.cell);
+            return;
+        }
+        assert!(h.target.is_some(), "a deduction until the stall: {h:?}");
+        rt.update(|s, _| {
+            (0..3).for_each(|_| s.press_hint());
+            s.apply_hint();
+        });
+    }
+    panic!("never stalled");
+}
