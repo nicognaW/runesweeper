@@ -12,14 +12,6 @@ pub enum Level {
 }
 
 impl Level {
-    pub fn name(self) -> &'static str {
-        match self {
-            Level::Beginner => "Beginner",
-            Level::Intermediate => "Intermediate",
-            Level::Expert => "Expert",
-            Level::Custom => "Custom",
-        }
-    }
     /// Columns, rows, mines.
     pub fn dims(self) -> Option<(usize, usize, usize)> {
         match self {

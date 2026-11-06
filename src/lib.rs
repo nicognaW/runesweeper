@@ -5,14 +5,18 @@ pub mod board;
 pub mod game;
 pub mod gfx;
 pub mod icons;
+pub mod locale;
 pub mod solver;
 pub mod storage;
+pub mod strings;
 pub mod style;
 pub mod toolbar;
 pub mod ui;
 
 #[cfg(test)]
 mod toolbar_tests;
+#[cfg(test)]
+mod lang_tests;
 
 use app::App;
 use game::Level;
@@ -84,6 +88,16 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     ("settings", |a| {
         *a = scene(Level::Beginner, 7);
         a.toggle_panel(app::Panel::Settings);
+    }),
+    ("settings-zh-cn", |a| {
+        let saved = Saved { lang: Some(strings::Lang::ZhCn), ..Saved::default() };
+        *a = App::with(saved, 7);
+        play(a, &[(4, 4)]);
+        a.toggle_panel(app::Panel::Settings);
+    }),
+    ("lost-zh-cn", |a| {
+        SCENES.iter().find(|s| s.0 == "lost").unwrap().1(a);
+        a.set_lang(strings::Lang::ZhCn);
     }),
     ("icon", |a| {
         *a = scene(Level::Beginner, 7);
