@@ -100,6 +100,12 @@ runesweeper --snap expert.png --scene expert --size 868x598 --scale 2
 runesweeper --scene beginner --script scripts/play.json --video play.mp4
 ```
 
+## Agent skills
+
+`.claude/skills/` holds the design, animation and engineering skills agents use on this repo;
+[`SOURCES.md`](.claude/skills/SOURCES.md) lists where each comes from. Two packs whose licenses
+don't allow republishing are installed with `scripts/install-skills.sh`.
+
 ## Layout
 
 - `src/game.rs`: the rules, with tests.

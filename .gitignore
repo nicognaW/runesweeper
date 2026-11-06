@@ -1,3 +1,17 @@
 /target
 /dist
 *.png.tmp
+
+# Installed by scripts/install-skills.sh (licenses don't allow republishing them)
+/.claude/skills/transitions-dev/
+/.claude/skills/transitions-polish/
+/.claude/skills/transitions-ui-generation/
+/.claude/skills/code-refactor-review/
+/.claude/skills/create-draft-pr/
+/.claude/skills/explain-then-fix/
+/.claude/skills/ga/
+/.claude/skills/ga-pr/
+/.claude/skills/pit-of-success/
+/.claude/skills/prepare-branch-context/
+/.claude/skills/ux-flow-plan/
+/.claude/skills/zero-tech-debt/
