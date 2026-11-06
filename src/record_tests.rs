@@ -203,14 +203,16 @@ fn the_timer_turns_gold_when_a_win_beats_the_fastest_win() {
     };
     let rows = ["...*", "...."];
     let mut a = win(&rows, Vec::new(), 30);
-    assert!(a.new_best, "the first win is the fastest yet");
+    assert!(!a.new_best, "the first win has no fastest win to beat");
     for (seconds, gold) in [(31, false), (30, false), (12, true), (20, false)] {
         a = win(&rows, a.history, seconds);
         assert_eq!(a.new_best, gold, "{seconds} s");
     }
-    // Another level has its own fastest win.
-    let mut a = win(&["....*", "....."], a.history, 40);
-    assert!(a.new_best, "another level");
+    // Another level has its own fastest win, so its first is plain and its next beats it.
+    let a = win(&["....*", "....."], a.history, 40);
+    assert!(!a.new_best, "another level's first win");
+    let mut a = win(&["....*", "....."], a.history, 39);
+    assert!(a.new_best, "another level's own fastest beaten");
     a.new_game_now();
     assert!(!a.new_best, "a new field starts plain");
 }

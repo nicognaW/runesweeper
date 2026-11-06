@@ -458,14 +458,14 @@ impl App {
     }
 
     /// The game ended: its record joins History. A field nobody clicked has none. A win that
-    /// beats the fastest for its mode and level, or is the first, turns the timer gold.
+    /// beats the fastest win for its mode and level turns the timer gold; the first has none to beat.
     fn finish(&mut self, end: End) {
         if !self.game.started {
             return;
         }
         let r = self.record_now(end);
         if end == End::Won {
-            self.new_best = record::fastest(&self.history, r.mode, r.dims).is_none_or(|best| r.seconds < best.seconds);
+            self.new_best = record::fastest(&self.history, r.mode, r.dims).is_some_and(|best| r.seconds < best.seconds);
         }
         storage::append_record(&r);
         storage::save_draft(None);

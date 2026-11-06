@@ -209,7 +209,7 @@ fn a_review_speaks_zh_cn_and_never_gives_odds() {
                     assert!(!l.contains(banned), "{w:?}");
                 }
                 if lang == Lang::ZhCn {
-                    let rest = w.replace("3BV/s", "").replace("3BV", "").replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
+                    let rest = w.replace("3BV/s", "").replace("3BV", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
                     assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English");
                 }
             }

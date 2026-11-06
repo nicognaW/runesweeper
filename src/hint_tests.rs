@@ -176,7 +176,7 @@ fn hint_text_never_gives_odds_in_either_language() {
                         assert!(!l.contains(banned), "{w:?}");
                     }
                     if lang == Lang::ZhCn {
-                        let rest = w.replace("F2", "").replace("MiSans", "").replace(Lang::En.endonym(), "");
+                        let rest = w.replace("MiSans", "").replace(Lang::En.endonym(), "");
                         assert!(!rest.chars().any(|c| c.is_ascii_alphabetic()), "{w:?} is still English");
                     }
                 }

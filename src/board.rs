@@ -263,11 +263,11 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
     let (title, sub, tint, delay) = match s.game.status {
         Status::Won => (
             if s.seconds == 1 { s.tr(S::WonIn1).to_string() } else { s.trf(S::WonIn, &[&s.seconds]) },
-            if s.new_best { s.trf(S::NewBest, &[&s.tr(S::level(s.level))]) } else { s.tr(S::WonAgain).to_string() },
+            s.new_best.then(|| s.trf(S::NewBest, &[&s.tr(S::level(s.level))])),
             p.win,
             0.3,
         ),
-        Status::Lost => (s.tr(S::Lost).to_string(), s.tr(S::LostAgain).to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
+        Status::Lost => (s.tr(S::Lost).to_string(), None, if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
         _ => return None,
     };
     // Max Guess says how the true 50/50s went instead, and whether the loss was one.
@@ -275,7 +275,7 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
         sub
     } else {
         let (got, of) = (s.fifty_fifties_survived(), s.fifty_fifties.len());
-        s.trf(if s.lost_on_fifty_fifty() { S::LostForced } else { S::FiftySurvived }, &[&got, &of])
+        Some(s.trf(if s.lost_on_fifty_fifty() { S::LostForced } else { S::FiftySurvived }, &[&got, &of]))
     };
     if s.banner_done {
         return None;
@@ -289,7 +289,7 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
         .min_w(0.0)
         .gap(2.0)
         .child(text(title).font(UI_BOLD).color(tint))
-        .child(text(sub).font(SMALL).color(p.muted).wrap().w_full())
+        .children(sub.map(|sub| text(sub).font(SMALL).color(p.muted).wrap().w_full()))
         .inert();
     let banner = rune::row()
             .key(format!("banner{}", s.field))

@@ -84,9 +84,7 @@ strings! {
     WonIn1: "Cleared in 1 second", "胜利！用时 1 秒";
     WonIn: "Cleared in {} seconds", "胜利！用时 {} 秒";
     NewBest: "New best for {}", "{}新纪录";
-    WonAgain: "F2 or the face for another", "按 F2 或笑脸再来一局";
     Lost: "Boom.", "失败";
-    LostAgain: "F2 or the face to try again", "按 F2 或笑脸重新开始";
     // Max Guess: the true 50/50s the field forces, before play and on the result banner.
     FiftyCount: "Forced 50/50s: {}", "死猜：{} 处";
     FiftySurvived: "Forced 50/50s survived: {} of {}", "闯过死猜：{} / {} 处";
