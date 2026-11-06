@@ -212,6 +212,7 @@ pub fn view(s: &App, reduced: bool) -> El {
                 .absolute(WELL - 1.0, WELL - 1.0)
                 .size(bw - 2.0 * WELL + 2.0, bh - 2.0 * WELL + 2.0)
                 .radius(6.0)
+                .transition(Transition::none())
                 .motion_intent(MotionIntent::CUT)
                 .inert(),
         );

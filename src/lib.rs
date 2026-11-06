@@ -94,12 +94,13 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         a.open_at(a.game.idx(15, 8));
         a.finish_laying();
     }),
-    // A field that takes its time: the face thinks, and after 600 ms the light sweeps.
+    // A field that takes its time: the face thinks, and after 600 ms the light sweeps. It is
+    // held for an hour, so it never lands while you look.
     ("generating", |a| {
         let saved = Saved { mode: game::Mode::NoGuess, level: Level::Expert, ..Saved::default() };
         *a = App::with(saved, 5);
         a.lay = |mode, dims, seed, first| {
-            std::thread::sleep(std::time::Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(3600));
             generate::lay(mode, dims, seed, first)
         };
         a.open_at(a.game.idx(15, 8));
