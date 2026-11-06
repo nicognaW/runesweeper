@@ -2,7 +2,7 @@
 
 use crate::game::{Cover, Mode, Status};
 use crate::generate::lay;
-use crate::solver::play;
+use crate::solver::{Strength, play};
 
 const BEGINNER: (usize, usize, usize) = (9, 9, 10);
 const INTERMEDIATE: (usize, usize, usize) = (16, 16, 40);
@@ -93,4 +93,64 @@ fn classic_is_the_xp_field_from_its_rand_stream() {
     let b = crate::game::Game::new(30, 16, 99, crate::game::Rng::new(9));
     assert_eq!(mines(&a), mines(&b));
     assert_eq!(mines(&lay(Mode::Classic, EXPERT, 9, 250)), mines(&b));
+}
+
+/// The property: in Gentle No Guess the first click opens an area and the bot at Gentle
+/// strength (one or two numbers at a time, the mine count near the end) wins with no guess.
+/// Every such field is also one perfect logic finishes: Gentle fields are No Guess fields.
+fn gentle_fields_are_won_by_pattern_play(level: (usize, usize, usize), seeds: u64) {
+    for seed in 0..seeds {
+        let first = first_click(seed, level);
+        let mut g = lay(Mode::GentleNoGuess, level, seed, first);
+        assert_eq!(mines(&g).len(), level.2, "seed {seed}");
+        assert!(!g.cells[first].mine, "seed {seed}: the first click is safe");
+        assert_eq!(g.cells[first].adj, 0, "seed {seed}: the first click opens an area");
+        assert!(play::clears(&g, first, Strength::Full), "seed {seed}: perfect logic finishes it too");
+        let played = play::play_at(&mut g, first, Strength::Gentle);
+        assert!(played.won && played.guesses == 0, "seed {seed}: {played:?}");
+    }
+}
+
+#[test]
+fn gentle_beginner_is_won_by_pattern_play() {
+    gentle_fields_are_won_by_pattern_play(BEGINNER, 200);
+}
+
+#[test]
+fn gentle_intermediate_is_won_by_pattern_play() {
+    gentle_fields_are_won_by_pattern_play(INTERMEDIATE, 30);
+}
+
+#[test]
+fn gentle_expert_is_won_by_pattern_play() {
+    gentle_fields_are_won_by_pattern_play(EXPERT, 10);
+}
+
+#[test]
+fn gentle_custom_fields_are_won_by_pattern_play() {
+    gentle_fields_are_won_by_pattern_play((9, 9, 20), 10);
+    gentle_fields_are_won_by_pattern_play((30, 9, 40), 5);
+}
+
+#[test]
+fn gentle_fields_are_the_same_from_the_same_seed_and_first_click() {
+    for seed in 0..20 {
+        let first = first_click(seed, BEGINNER);
+        let a = mines(&lay(Mode::GentleNoGuess, BEGINNER, seed, first));
+        assert_eq!(a, mines(&lay(Mode::GentleNoGuess, BEGINNER, seed, first)), "seed {seed}");
+    }
+    let a = mines(&lay(Mode::GentleNoGuess, BEGINNER, 1, 40));
+    assert_ne!(a, mines(&lay(Mode::GentleNoGuess, BEGINNER, 2, 40)));
+    assert_ne!(a, mines(&lay(Mode::GentleNoGuess, BEGINNER, 1, 0)));
+}
+
+#[test]
+fn some_no_guess_fields_need_more_than_pattern_play() {
+    // Gentle is a real restriction: over a few seeds, No Guess lays fields that only
+    // perfect logic finishes.
+    let harder = (0..40).any(|seed| {
+        let first = first_click(seed, INTERMEDIATE);
+        !play::clears(&lay(Mode::NoGuess, INTERMEDIATE, seed, first), first, Strength::Gentle)
+    });
+    assert!(harder);
 }
