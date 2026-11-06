@@ -68,12 +68,13 @@ jobs:
           path: runesweeper-windows-x86_64.zip
 
   macos:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: rust-src
       - uses: Swatinem/rust-cache@v2
       - run: |
           cargo build --locked --profile dist --target aarch64-apple-darwin
@@ -102,6 +103,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          # Installed up front: otherwise parallel build scripts race to install it and fail.
+          components: rust-src
       - uses: Swatinem/rust-cache@v2
       - name: wasm-bindgen CLI (the version in Cargo.lock)
         run: |
