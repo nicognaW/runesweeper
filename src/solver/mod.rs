@@ -4,6 +4,7 @@
 
 pub mod bench;
 pub mod exact;
+pub mod fifty;
 pub mod play;
 
 use crate::game::{Cover, Game};
