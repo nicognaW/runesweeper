@@ -97,8 +97,15 @@ fn tools(s: &App, p: &Palette) -> Vec<El> {
     v
 }
 
+/// Max Guess, once the field is laid: how many true 50/50s it forces, before any is met.
+fn fifty_count(s: &App, p: &Palette) -> Option<El> {
+    let laid = s.mode == Mode::MaxGuess && !s.unlaid && s.generating.is_none();
+    let label = s.trf(S::FiftyCount, &[&s.fifty_fifties.len()]);
+    laid.then(|| well(row().key("fifty-count").h(30.0).px(12.0).radius(9.0)).center_y().role("status").label(label.clone()).child(text(label).font(UI).color(p.text)))
+}
+
 pub fn toolbar(s: &App, p: &Palette) -> El {
-    row().key("toolbar").w_full().h(TOOLBAR_H).px(16.0).pt(8.0).gap(8.0).center_y().child(chip(s, p)).child(spacer()).children(tools(s, p))
+    row().key("toolbar").w_full().h(TOOLBAR_H).px(16.0).pt(8.0).gap(8.0).center_y().child(chip(s, p)).children(fifty_count(s, p)).child(spacer()).children(tools(s, p))
 }
 
 /// A panel's surface, styled like the console it drops from, anchored under its button.
@@ -126,27 +133,33 @@ pub(crate) fn choice(key: &str, on: bool, p: &Palette) -> El {
     if on { r.border(1.0, p.accent.alpha(0.8)) } else { r }
 }
 
-/// The Mode row: one segment per Mode, the current one lit. A press starts a new field in it.
+/// The Mode rows: one segment per Mode, the current one lit. A press starts a new field in it.
 fn modes(s: &App, p: &Palette) -> El {
-    let mut options = row().key("modes").role("radiogroup").label(s.tr(S::ModeRow)).w_full().h(40.0).px(4.0).gap(4.0).center_y();
-    for m in Mode::ALL {
-        let on = s.mode == m;
-        let name = s.tr(S::mode(m));
-        let mut o = el()
-            .key(format!("mode-{}", m.tag()))
-            .h(32.0)
-            .grow(1.0)
-            .radius(7.0)
-            .center()
-            .role("radio")
-            .label(name.to_string())
-            .checked(on)
-            .focusable(true)
-            .press_scale(0.96)
-            .on_press(move |s: &mut App| s.pick_mode(m))
-            .child(text(name).font(UI_BOLD).color(if on { p.text } else { p.muted }));
-        o = if on { o.fill(p.accent.alpha(0.22)).border(1.0, p.accent.alpha(0.8)) } else { o.hover(p.tile_hover) };
-        options = options.child(o);
+    // Two to a row, in reading order: four names side by side don't fit the panel.
+    let mut options = col().key("modes").role("radiogroup").label(s.tr(S::ModeRow)).w_full().padding(4.0).gap(4.0);
+    for pair in Mode::ALL.chunks(2) {
+        let mut line = row().w_full().gap(4.0);
+        for &m in pair {
+            let on = s.mode == m;
+            let name = s.tr(S::mode(m));
+            let mut o = el()
+                .key(format!("mode-{}", m.tag()))
+                // Equal halves whatever the names' lengths.
+                .size(0.0, 32.0)
+                .grow(1.0)
+                .radius(7.0)
+                .center()
+                .role("radio")
+                .label(name.to_string())
+                .checked(on)
+                .focusable(true)
+                .press_scale(0.96)
+                .on_press(move |s: &mut App| s.pick_mode(m))
+                .child(text(name).font(UI_BOLD).color(if on { p.text } else { p.muted }));
+            o = if on { o.fill(p.accent.alpha(0.22)).border(1.0, p.accent.alpha(0.8)) } else { o.hover(p.tile_hover) };
+            line = line.child(o);
+        }
+        options = options.child(line);
     }
     well(options.radius(10.0))
 }

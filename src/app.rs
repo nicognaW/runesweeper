@@ -66,6 +66,9 @@ pub struct App {
     /// The field the first click asked for, being generated off the UI thread. The face
     /// thinks and the field takes no input until it lands.
     pub generating: Option<Generating>,
+    /// Max Guess: the true 50/50s the laid field forces on a perfect player, each as its pair
+    /// of cells (empty in the other modes, and before the field is laid).
+    pub fifty_fifties: Vec<(usize, usize)>,
     /// When that generation started, on the poll clock (stamped by the first poll after the
     /// click, as the click's own clock may be stale).
     pub generating_since: Option<f64>,
@@ -167,6 +170,7 @@ impl App {
             unlaid: false,
             clock_waits: false,
             generating: None,
+            fifty_fifties: Vec::new(),
             generating_since: None,
             sweep_from: None,
             lay: generate::lay,
@@ -248,6 +252,7 @@ impl App {
         self.clock_waits = false;
         // A field still generating is cancelled: it never lands.
         self.generating = None;
+        self.fifty_fifties.clear();
         self.generating_since = None;
         self.sweep_from = None;
         self.unlaid = self.mode.lays_on_first_click();
@@ -280,6 +285,11 @@ impl App {
             c.cover = old.cover;
         }
         g.flags = self.game.flags;
+        // Found from the layout alone, as a perfect player meets them: the web's worker
+        // sends back only the mines.
+        if self.mode == Mode::MaxGuess {
+            self.fifty_fifties = play::walk(&g, first).fifty_fifties;
+        }
         self.game = g;
         self.record.layout = Layout::Seeded { seed: self.seed, first };
         // The record's clock, like the timer, starts with the field: generating never counts.
@@ -290,6 +300,18 @@ impl App {
         if self.game.cells[first].cover == Cover::Open {
             self.hover_on.set(0.0);
         }
+    }
+
+    /// The true 50/50s got through: the pair's safe cell is open.
+    pub fn fifty_fifties_survived(&self) -> usize {
+        let c = &self.game.cells;
+        self.fifty_fifties.iter().filter(|&&(a, b)| (c[a].cover == Cover::Open && !c[a].mine) || (c[b].cover == Cover::Open && !c[b].mine)).count()
+    }
+
+    /// The mine stepped on was one of a true 50/50's: no reading of the field could have
+    /// avoided it.
+    pub fn lost_on_fifty_fifty(&self) -> bool {
+        self.game.status == Status::Lost && self.game.hit.is_some_and(|m| self.fifty_fifties.iter().any(|&(a, b)| a == m || b == m))
     }
 
     /// Waits for a field being generated and lands it (scenes and tests).

@@ -7,7 +7,7 @@ use rune::{Beat, Color, Cursor, El, MotionIntent, PointerButton, Sequence, Sprin
 use rune_motion::Easing;
 
 use crate::app::App;
-use crate::game::{Cover, Status};
+use crate::game::{Cover, Mode, Status};
 use crate::gfx;
 use crate::icons::{cross, flag, mine};
 use crate::strings::S;
@@ -253,6 +253,13 @@ fn banner(s: &App, p: &Palette, bw: f32, bh: f32, reduced: bool) -> Option<El> {
         ),
         Status::Lost => (s.tr(S::Lost).to_string(), s.tr(S::LostAgain).to_string(), if s.saved.color { c(0xff5c6c) } else { p.text }, 0.35),
         _ => return None,
+    };
+    // Max Guess says how the true 50/50s went instead, and whether the loss was one.
+    let sub = if s.mode != Mode::MaxGuess {
+        sub
+    } else {
+        let (got, of) = (s.fifty_fifties_survived(), s.fifty_fifties.len());
+        s.trf(if s.lost_on_fifty_fifty() { S::LostForced } else { S::FiftySurvived }, &[&got, &of])
     };
     if s.banner_done {
         return None;
