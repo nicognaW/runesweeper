@@ -302,8 +302,7 @@ impl App {
         }
         self.game = g;
         // The mines as laid, so a review of it never lays the field again.
-        let laid = (0..self.game.cells.len()).filter(|&i| self.game.cells[i].mine).collect();
-        self.record.layout = Layout::Seeded { seed: self.seed, first, laid: Some(laid) };
+        self.record.layout = Layout::Seeded { seed: self.seed, first, laid: Some(self.game.mine_cells()) };
         // The record's clock, like the timer, starts with the field: generating never counts.
         self.record_t0 = Some(self.now);
         self.unlaid = false;
@@ -527,7 +526,7 @@ impl App {
         }
         if !self.game.started && !chord {
             // Classic keeps its field as dealt: replaying the first click moves a mine again.
-            self.record.layout = Layout::Mines((0..self.game.cells.len()).filter(|&j| self.game.cells[j].mine).collect());
+            self.record.layout = Layout::Mines(self.game.mine_cells());
         }
         self.play(chord, i);
     }

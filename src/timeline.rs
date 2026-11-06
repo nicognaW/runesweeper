@@ -7,7 +7,6 @@ use rune::{El, Phase, col, el, row, spacer, text};
 
 use crate::app::App;
 use crate::callout::{self, line, ring};
-use crate::game::Game;
 use crate::generating::Generating;
 use crate::hint::words;
 use crate::record::Layout;
@@ -41,7 +40,7 @@ impl App {
     pub fn review_last(&mut self) {
         let Some(r) = self.history.last().filter(|_| self.game.over()) else { return };
         let base = match r.layout {
-            Layout::Seeded { .. } => Game::with_mines(self.game.w, self.game.h, &(0..self.game.cells.len()).filter(|&i| self.game.cells[i].mine).collect::<Vec<_>>()),
+            Layout::Seeded { .. } => self.game.as_laid(),
             Layout::Mines(_) => r.base().expect("Classic keeps its mines"),
         };
         self.review = Some(Review::on(r, base, self.fifty_fifties.clone()));

@@ -86,7 +86,7 @@ fn tap(rt: &mut Runtime<App>, i: usize) {
 }
 
 fn mines(g: &Game) -> Vec<usize> {
-    (0..g.cells.len()).filter(|&i| g.cells[i].mine).collect()
+    g.mine_cells()
 }
 
 fn thinking(rt: &Runtime<App>) -> bool {

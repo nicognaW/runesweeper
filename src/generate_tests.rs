@@ -10,7 +10,7 @@ const INTERMEDIATE: (usize, usize, usize) = (16, 16, 40);
 const EXPERT: (usize, usize, usize) = (30, 16, 99);
 
 fn mines(g: &crate::game::Game) -> Vec<usize> {
-    (0..g.cells.len()).filter(|&i| g.cells[i].mine).collect()
+    g.mine_cells()
 }
 
 /// A first click spread over the field, corners and edges included.

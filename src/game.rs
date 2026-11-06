@@ -150,6 +150,16 @@ impl Game {
         g
     }
 
+    /// Where the mines are, in cell order.
+    pub fn mine_cells(&self) -> Vec<usize> {
+        (0..self.cells.len()).filter(|&i| self.cells[i].mine).collect()
+    }
+
+    /// This field as laid: the same mines, nothing open.
+    pub fn as_laid(&self) -> Game {
+        Game::with_mines(self.w, self.h, &self.mine_cells())
+    }
+
     /// A field with no mines yet: the new modes lay them on the first click. The counter
     /// already shows `mines`.
     pub fn unlaid(w: usize, h: usize, mines: usize) -> Game {
@@ -433,6 +443,18 @@ mod tests {
         let g = Game::new(9, 9, 1, Rng::new(1));
         let (x, y) = (41 % 9, 18467 % 9);
         assert!(g.cells[g.idx(x, y)].mine);
+    }
+
+    #[test]
+    fn a_field_played_gives_back_its_mines_and_itself_as_laid() {
+        let mut g = Game::with_mines(4, 3, &[1, 6, 11]);
+        g.start();
+        g.open(8);
+        g.mark(1, false);
+        assert_eq!(g.mine_cells(), [1, 6, 11]);
+        let laid = g.as_laid();
+        assert_eq!((laid.w, laid.h, laid.mines, laid.mine_cells()), (4, 3, 3, vec![1, 6, 11]));
+        assert!(laid.cells.iter().all(|c| c.cover == Cover::Hidden) && !laid.started, "nothing played");
     }
 
     #[test]

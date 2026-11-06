@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn a_record_rebuilds_its_field_only_from_mines_it_keeps() {
-        let field = |r: &Record| r.base().map(|g| (0..g.cells.len()).filter(|&i| g.cells[i].mine).collect::<Vec<_>>());
+        let field = |r: &Record| r.base().map(|g| g.mine_cells());
         let classic = Record { layout: Layout::Mines(vec![1, 2]), ..Record::new(Mode::Classic, (9, 9, 2)) };
         assert_eq!(field(&classic), Some(vec![1, 2]));
         let laid = Record { layout: Layout::Seeded { seed: 5, first: 40, laid: Some(vec![0, 80]) }, ..Record::new(Mode::NoGuess, (9, 9, 2)) };
