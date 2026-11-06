@@ -11,7 +11,9 @@ Scope note on method and access (read first):
   - `quasarbright/minesweeper` @ `fbf1557` (2024-03-29)
   - `sam-gc/minesweeper-generator-solver` @ `560fd9d` (2014)
   - `mrgriscom/minesweepr` @ `b9d9989`
-- I could not reach these: git.tartarus.org (upstream puzzles git), chiark.greenend.org.uk (Tatham's site and benchmark page), minesweeper.online, minesweepergame.com, arxiv.org, quasarbright.github.io, robot.unipv.it, or the Reddit mirror. Proxy or DNS refused them all. Anything about those sites rests only on search-engine snippets and is marked as such.
+- **Checked against upstream.** I later cloned upstream `https://git.tartarus.org/simon/puzzles.git` @ `616da16f25da428ccda805536209095bd062676e` (Simon Tatham, 2026-09-22, "Mines: add a user preference for question marks"), which is the newest upstream `mines.c` commit. The whole span from `minesolve()` to just before `describe_layout()` is **byte-identical** to the mirror copy I cite below (checked with `diff`). Later upstream commits (`a33f458`, `3b117ab`, `428913c` "rename 'cyclic' grids to 'wrapping'", `7914338`, `616da16`) touch only UI and drawing. Upstream line numbers are **mirror line + 11** in that span: `minesolve` is at upstream L1967, `mineperturb` at L2755, `minegen` at L3159, and `allow_big_perturbs = (ntries > 100)` at L3271. Upstream blob: [mines.c @ 616da16](https://git.tartarus.org/?p=simon/puzzles.git;a=blob;f=mines.c;hb=616da16f25da428ccda805536209095bd062676e). Line-level links below go to the mirror because GitHub anchors are stable.
+- **Fetched later with curl:** the arXiv abstract page and Kaboom's author blog post. minesweeper.online returned only a JavaScript app shell with no descriptive text. Tatham's site has no `benchmark.html` or `bench/` page (both 404).
+- **Still unreachable:** minesweepergame.com, quasarbright.github.io, robot.unipv.it and the Reddit mirror. Anything from those rests on search snippets and is marked as such.
 - I built an instrumented harness to time Tatham's generator at Expert. The sandbox refused to let me **run** it ("Code from External" policy). **None of the timings below were measured by me.**
 - I found **no** repository by Magnus Hoff (GitHub user search `user:maghoff` for mine-related repos returned nothing, and cloning `maghoff/mine-generator` and `maghoff/minesweeper` failed). His generator is **unverified / not covered**.
 
@@ -28,7 +30,7 @@ Tatham's Mines is the oldest and most widely cited guess-free generator. It does
 
 **Solver: `minesolve()`, L1956-2665**
 - **Inputs and outputs.** The board array holds -1 (known mine), 0..N (opened number) and -2 (unknown). The return value is -1 for "stalled", 0 for "solved with no perturbation", and >0 for "solved after k perturb calls" — [mines.c L1937-1952](https://github.com/samfundev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L1937-L1952)
-- **Building sets.** Each opened number becomes a set: its unknown neighbours plus a remaining mine count (the clue minus known neighbouring mines). When a square becomes known, it is removed from every set that contains it, and duplicate or empty sets are dropped — [mines.c L1994-2079](https://github.com/samfondev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L1994-L2079)
+- **Building sets.** Each opened number becomes a set: its unknown neighbours plus a remaining mine count (the clue minus known neighbouring mines). When a square becomes known, it is removed from every set that contains it, and duplicate or empty sets are dropped — [mines.c L1994-2079](https://github.com/samfundev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L1994-L2079)
 - **Deduction 1, trivial rule.** If `mines == 0` or `mines == n`, every square in the set is clear or every square is a mine — [L2095-2113](https://github.com/samfundev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L2095-L2113)
 - **Deduction 2, pairwise "wings".** For each overlapping set s2, the code computes s−s2 and s2−s. If one set has extra mines equal to the size of its wing, that wing is all mines and the other wing is all clear — [L2128-2153](https://github.com/samfundev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L2128-L2153)
 - **Deduction 3, subset splitting.** If s ⊂ s2, the code adds a new set s2−s with `mines = s2.mines − s.mines`, and likewise the other way round. Derived sets can feed later deductions — [L2155-2172](https://github.com/samfundev/puzzles/blob/ede745aa858b1a47e3b12803879716ef173ed7a7/mines.c#L2155-L2172)
@@ -80,8 +82,8 @@ Tatham's Mines is the oldest and most widely cited guess-free generator. It does
 - **Speed.** Each solver pass is roughly linear in board size. Most of the time should go on restarts and repeated re-solves. That it is fast at Expert is plausible, but **I did not measure it**.
 
 ### Gaps
-- No measured Expert (30×16/99) timings or try counts. My harness was built but the sandbox would not let me execute it. Tatham's published benchmark page (chiark) could not be reached.
-- I could not read upstream git.tartarus.org directly. Code was read from the `samfundev/puzzles` mirror, whose `mines.c` commits are authored by Simon Tatham and match upstream messages.
+- No measured Expert (30×16/99) timings or try counts. My harness was built but the sandbox would not let me execute it. No public Tatham benchmark page was found: `~sgtatham/puzzles/benchmark.html` and `bench/` return 404. The `benchmark.sh`/`benchmark.pl` scripts exist only for local runs.
+- The upstream check (see the scope note) confirms the solver and generator code read from the mirror equals upstream @ `616da16`.
 - I could not confirm the original introduction date of Mines (2005, from memory). The mirror clone was shallow.
 
 ## Other generators: minesweeper.online, JSMinesweeper, mindsweeper, Kaboom, other open source; rejection vs constructive vs perturbation
@@ -131,6 +133,13 @@ I found no truly constructive generator that builds a board clue by clue.
 - **No board is fixed in advance.** Each click asks a SAT solver (bundled `minisat.js`) whether the clicked cell *can* be safe or *can* be a mine, given all revealed labels and a cardinality counter for the global mine count (`assertCounterAtLeast/AtMost`).
 - **Adversarial rule.** The game picks a safe shape only if the cell cannot be dangerous, or if no provably safe cell exists anywhere (`!hasSafeCells`). Otherwise it picks a shape in which the cell is a mine. Guessing when a safe deduction exists is therefore always punished, and forced guesses are always survived.
 - Source: [index.js L137-192 (reveal), L570-670 (Solver)](https://github.com/pwmarcz/kaboom/blob/2c5cc170ae7a2ac6faf4da348e13b50c5c3dddb4/index.js#L137-L670)
+- **Author's write-up** ("Kaboom: an unusual Minesweeper", 2019-11-21):
+  - The rules are "cruel, but fair". If any safe squares exist, an uncertain square "will contain a mine". Otherwise "guessing is allowed and that square will be empty".
+  - His first version enumerated boundary arrangements by backtracking and hit "18 million possible mine arrangements … 12 gigabytes of memory and revealing a square takes half a minute". He then switched to MiniSat compiled to JS.
+  - Mine-count tracking uses the Bailleux–Boufkhad cardinality encoding, which generates Θ(N²) clauses: "When the number of open squares is around 100, the game becomes sluggish".
+  - Squares once proven are cached out of the formula.
+  - Outside-boundary clicks are punished, except at game start or when they are forced or provably safe. A later switch made this behaviour optional.
+  - Source: [pwmarcz.pl/blog/kaboom](https://pwmarcz.pl/blog/kaboom/)
 
 **lrvideckis Minesweeper_Android**
 - **Repair loop.** `getSolvableBoard()` runs:
@@ -153,7 +162,7 @@ I found no truly constructive generator that builds a board clue by clue.
 - Source: [solver.c L274-322](https://github.com/sam-gc/minesweeper-generator-solver/blob/560fd9d808b5adbbcb93dceb3e55a451dd0b4ad0/solver.c#L274-L322)
 
 **minesweeper.online and other web clones (snippets only, unverified)**
-- minesweeper.online was unreachable. Search snippets of a "Minesweeper Online" page (1000mines.com) say No-guessing mode generates "a board our solver can complete from your opening move", that generation "can take a moment", and that the game asks you to retry if no board is found. That retry behaviour is consistent with rejection sampling — [1000mines.com (snippet)](https://www.1000mines.com/)
+- minesweeper.online (fetched with curl) serves only a JavaScript app shell. Its menu lists "No guessing mode: New game / Ranking / My games", but the static HTML has no description of the algorithm. Search snippets of a "Minesweeper Online" page (1000mines.com) say No-guessing mode generates "a board our solver can complete from your opening move", that generation "can take a moment", and that the game asks you to retry if no board is found. That retry behaviour is consistent with rejection sampling — [1000mines.com (snippet)](https://www.1000mines.com/)
 - minesweeper.now describes: generate around the protected first click, run its deduction solver, reject if a guess is needed — [minesweeper.now FAQ (snippet)](https://minesweeper.now/faq/no-guessing-minesweeper)
 - **mrgriscom/minesweepr** is an exact probability solver with "guaranteed opening" first clicks, not a no-guess generator. Its latest commit is "support 'guaranteed opening' first clicks; make the mine reshuffling involve stable wrt undo" — [minesweepr @ b9d9989](https://github.com/mrgriscom/minesweepr/commit/b9d9989ad8b2955c4c2a44690b34f88fc02ed4d5)
 
@@ -238,7 +247,12 @@ The academic literature covers the *complexity* of Minesweeper consistency and i
 - **Kaye (2000)** showed the Minesweeper consistency problem is NP-complete. This is via secondary summaries — [minesweeperblast.com (snippet)](https://minesweeperblast.com/no-guess-minesweeper/); [Demaine & Hearn survey, arXiv cs/0106019](https://arxiv.org/pdf/cs/0106019)
 - **Scott, Stege & van Rooij**, "Minesweeper May Not Be NP-Complete but Is Hard Nonetheless", Mathematical Intelligencer 33 (2011), argue the inference question is coNP-complete — [Springer PDF mirror](https://hn.jakechampion.name/reader/https://link.springer.com/content/pdf/10.1007/s00283-011-9256-x.pdf); [MaRDI record](https://portal.mardi4nfdi.de/wiki/Publication:660171)
 - **MIT Hardness Group (FUN 2024)** reports a flaw in the published coNP-hardness proofs for inference and supplies a corrected proof — [arXiv 2404.14519 (snippet)](https://arxiv.com/abs/2404.14519); [LIPIcs FUN 2024 paper 25](https://drops.dagstuhl.de/storage/00lipics/lipics-vol291-fun2024/LIPIcs.FUN.2024.25/LIPIcs.FUN.2024.25.pdf)
-- **Dempsey & Guinn**, "A Phase Transition in Minesweeper" (FUN 2020, arXiv 2008.04116), find empirically a SAT-like phase transition: "above the critical mine density it becomes almost impossible to play Minesweeper by logical inference", with algorithmic barriers at the transition. This is via search snippet; the full text was unreachable — [arXiv 2008.04116](https://arxiv.org/pdf/2008.04116)
+- **Dempsey & Guinn**, "A Phase Transition in Minesweeper", arXiv 2008.04116, submitted 10 Aug 2020, "Accepted to FUN with Algorithms 2020". The abstract, verified on arXiv:
+  - "Minesweeper exhibits a phase transition analogous to the well-studied SAT phase transition. Above the critical mine density it becomes almost impossible to play Minesweeper by logical inference."
+  - Hardness, characterised by a reduction to Boolean unsatisfiability, "peaks at the phase transition".
+  - There are "algorithmic barriers at the phase transition for polynomial-time approaches".
+  - The abstract also says "Playing Minesweeper is known to be co-NP-complete."
+  - Source: [arXiv abs 2008.04116](https://arxiv.org/abs/2008.04116)
 - "Algorithms for Minesweeper Game Grid Generation" (2017) is listed on minesweepergame.com, but **its contents could not be retrieved** (host blocked) — [PDF link](https://minesweepergame.com/math/algorithms-for-minesweeper-game-grid-generation-2017.pdf)
 
 ### Inferences
@@ -247,7 +261,7 @@ The academic literature covers the *complexity* of Minesweeper consistency and i
 - **Uniform sampling.** Exact uniform sampling over no-guess boards is easy by rejection when acceptance is not tiny. I know of no MCMC or exact-counting method for no-guess boards in the literature.
 
 ### Gaps
-- I could not read the full texts of Dempsey & Guinn, Kaye, or the 2017 grid-generation paper (hosts blocked), so critical density values are not quoted.
+- I read only the arXiv abstract of Dempsey & Guinn, not the PDF body, so its numeric critical density is not quoted. I could not read Kaye or the 2017 grid-generation paper (minesweepergame.com still unreachable).
 - No paper on uniform sampling of no-guess boards was found.
 
 ## Recommendation for a Rust desktop/web clone needing instant Expert generation
