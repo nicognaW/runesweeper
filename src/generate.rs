@@ -4,7 +4,9 @@
 //! the first click, keep the 3×3 around it clear, and draw from their own generator, so the
 //! same inputs always give the same field. No Guess redraws uniform fields until the bot
 //! finishes one from the click by perfect logic: no time limit and no mine moved, so an
-//! accepted field is a uniform draw over the fields logic can finish.
+//! accepted field is a uniform draw over the fields logic can finish. Gentle No Guess does
+//! the same with the bot at Gentle strength, so its fields are No Guess fields that pattern
+//! play finishes.
 
 use crate::game::{Game, Mode, Rng};
 use crate::solver::{Strength, play};
@@ -23,6 +25,7 @@ pub fn lay(mode: Mode, dims: Dims, seed: u64, first: usize) -> Game {
 pub fn lay_counting(mode: Mode, (w, h, mines): Dims, seed: u64, first: usize) -> (Game, u32) {
     match mode {
         Mode::Classic => (Game::new(w, h, mines, Rng::new(seed as u32)), 1),
+        Mode::GentleNoGuess => redraw_until_clear(w, h, mines, seed, first, Strength::Gentle),
         Mode::NoGuess => redraw_until_clear(w, h, mines, seed, first, Strength::Full),
     }
 }

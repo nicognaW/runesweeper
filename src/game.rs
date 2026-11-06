@@ -37,12 +37,15 @@ pub enum Mode {
     /// Windows XP's fields, first-click quirks included.
     #[default]
     Classic,
+    /// Fields one number, or two overlapping numbers, at a time finish from the first click
+    /// (the mine count helps near the end); the first click always opens an area.
+    GentleNoGuess,
     /// Fields perfect logic finishes from the first click, which always opens an area.
     NoGuess,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 2] = [Mode::Classic, Mode::NoGuess];
+    pub const ALL: [Mode; 3] = [Mode::Classic, Mode::GentleNoGuess, Mode::NoGuess];
 
     /// Whether mines wait for the first click (and are laid by [`crate::generate::lay`]).
     pub fn lays_on_first_click(self) -> bool {
@@ -53,6 +56,7 @@ impl Mode {
     pub fn tag(self) -> &'static str {
         match self {
             Mode::Classic => "classic",
+            Mode::GentleNoGuess => "gentle-no-guess",
             Mode::NoGuess => "no-guess",
         }
     }

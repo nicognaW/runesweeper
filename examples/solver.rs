@@ -1,16 +1,19 @@
-//! How strong the solver bot is on Classic fields, and what No Guess generation costs, per
-//! level. `cargo run --release --example solver -- [games per level] [seed] [No Guess fields]`
+//! How strong the solver bot is on Classic fields, and what Gentle No Guess and No Guess
+//! generation cost, per level.
+//! `cargo run --release --example solver -- [games per level] [seed] [fields per mode and level]`
 //! (defaults: 1000, 1, 1000)
 //!
 //! Classic: XP's `rand()` stream, seeded once, one field after another; first click on the
 //! top-left cell with XP's first-click relocation. No Guess: each field's seed and first click
 //! (anywhere on the field) drawn in turn from the seed; uniform fields with the 3×3 around the
 //! click clear are redrawn until the full-strength bot clears one without guessing, and the
-//! bot then plays it to check. The same seed gives the same games and fields.
+//! bot then plays it to check. Gentle No Guess is the same with the bot at Gentle strength
+//! (one or two numbers at a time, the mine count near the end), which also does the check.
+//! The same seed gives the same games and fields.
 use std::time::Duration;
 
 use runesweeper::{
-    game::Level,
+    game::{Level, Mode},
     solver::bench,
     strings::{Lang, S},
 };
@@ -23,7 +26,7 @@ fn ms(d: Duration) -> f64 {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let usage = "usage: solver [games per level] [seed] [No Guess fields per level]";
+    let usage = "usage: solver [games per level] [seed] [fields per mode and level]";
     let games: u64 = args.next().map(|a| a.parse().expect(usage)).unwrap_or(1000);
     let seed: u32 = args.next().map(|a| a.parse().expect(usage)).unwrap_or(1);
     let fields: u64 = args.next().map(|a| a.parse().expect(usage)).unwrap_or(1000);
@@ -43,11 +46,19 @@ fn main() {
             t.ms_per_game(),
         );
     }
-    println!();
-    println!("No Guess, first click anywhere with its 3×3 clear, {fields} fields per level, seed {seed}");
+    for mode in [Mode::GentleNoGuess, Mode::NoGuess] {
+        println!();
+        generation(mode, fields, seed as u64);
+    }
+}
+
+/// Acceptance and generation time per level for `mode`, each field checked by the bot.
+fn generation(mode: Mode, fields: u64, seed: u64) {
+    let name = S::mode(mode).get(Lang::En);
+    println!("{name}, first click anywhere with its 3×3 clear, {fields} fields per level, seed {seed}");
     println!("{:<13} {:>10}  {:<17} {:>9} {:>9} {:>9} {:>14}", "level", "accepted", "95% Wilson", "p50 ms", "p99 ms", "max ms", "no-guess wins");
     for level in LEVELS {
-        let g = bench::no_guess(level.dims().unwrap(), fields, seed as u64);
+        let g = bench::generation(mode, level.dims().unwrap(), fields, seed);
         let (lo, hi) = bench::wilson(g.fields, g.attempts);
         println!(
             "{:<13} {:>9.2}%  {:>6.2}% – {:>6.2}% {:>9.2} {:>9.2} {:>9.2} {:>13.2}%",
