@@ -14,7 +14,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUNE_REV: 781e2b6d87cd5f32d6f4365956fad4baaf24ee50
 
 concurrency:
   group: build-${{ github.ref }}
@@ -106,19 +105,9 @@ jobs:
           # Installed up front: otherwise parallel build scripts race to install it and fail.
           components: rust-src
       - uses: Swatinem/rust-cache@v2
-      - name: wasm-bindgen CLI (the version in Cargo.lock)
-        run: |
-          v=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')
-          curl -sSL https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$v/wasm-bindgen-$v-x86_64-unknown-linux-musl.tar.gz | tar xz
-          sudo mv wasm-bindgen-$v-x86_64-unknown-linux-musl/wasm-bindgen /usr/local/bin/
-          wasm-bindgen --version
       - name: Build
         run: |
-          git clone --filter=blob:none -q https://github.com/anomalyco/rune ../rune
-          git -C ../rune checkout -q $RUNE_REV
-          ../rune/scripts/web-build.sh runesweeper --out dist/web --no-html
-          cp web/index.html dist/web/index.html
-          cp packaging/runesweeper.png dist/web/icon.png
+          scripts/web-build.sh
           (cd dist/web && zip -qr ../../runesweeper-web.zip .)
       - uses: actions/upload-artifact@v4
         with:
