@@ -60,6 +60,25 @@ Expert (view, diff, layout, draw lists) at 0.4 ms median and 0.7 ms p95, even wh
 dragged across the field. Nothing redraws at rest, and the shockwave's full-window backdrop copy
 exists only for its 0.6 s.
 
+## Solver
+
+A bot plays every cell it can prove, then the hidden cell least likely to be a mine. On
+Expert it wins **37.3%** of games (95% Wilson interval 36.4–38.3%), guessing 3.74 times per
+win; 4.5% of games are won without a single guess; a game takes 1.6 ms.
+
+The rules: Classic Expert (30×16, 99 mines), 10,000 fields dealt one after another from the
+MSVC `rand()` stream seeded with 1, first click on the top-left cell. A mine there moves to
+the first free cell as XP moves it, so the click is safe but need not open an area. This is
+not the rule behind published "safe first click" figures (Tu et al.'s 40.06%, for one),
+where the first cell's mine goes anywhere else on the field. The bot's odds assume every
+layout equally likely and ignore the relocation's bias toward the top left.
+
+```sh
+cargo run --release --example solver -- 10000 1   # games per level, seed
+```
+
+It prints the same columns for Beginner and Intermediate; the same seed gives the same numbers.
+
 ## Download
 
 Builds of the latest commit are on the [Latest build](https://github.com/nicognaW/runesweeper/releases/tag/latest)
@@ -128,6 +147,7 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
 ## Layout
 
 - `src/game.rs`: the rules, with tests.
+- `src/solver/`: proofs, exact odds, the bot and its benchmark (`examples/solver.rs`).
 - `src/app.rs`: state, input (press, chord, flag), the clock, keys.
 - `src/board.rs`, `src/ui.rs`, `src/icons.rs`, `src/style.rs`: the view, vector art and palettes.
 - `src/gfx.rs`: the compositor that turns effect slots into `rune-fx` shaders.

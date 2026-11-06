@@ -2,6 +2,7 @@
 //! numbers, and how likely each cell is to hide a mine. No drawing, no game rules beyond
 //! the numbers; the generators, the hint and the benchmark all build on it.
 
+pub mod bench;
 pub mod exact;
 pub mod play;
 
