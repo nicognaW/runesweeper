@@ -58,7 +58,7 @@ fn fifty_count(s: &App, p: &Palette, console_w: f32) -> Option<El> {
     laid.then(|| row().absolute(0.0, -11.0).size(console_w, 22.0).center().inert().child(tab))
 }
 
-fn face_button(s: &App, p: &Palette) -> El {
+fn face_button(s: &App, p: &Palette, reduced: bool) -> El {
     let sz = 44.0;
     let mood = s.mood();
     let ink = c(0x1a1206);
@@ -81,12 +81,12 @@ fn face_button(s: &App, p: &Palette) -> El {
                 // The expression swaps in the frame it changes, as the original's does.
                 .child(face(sz, mood, ink).key(format!("mood-{mood:?}")).absolute(0.0, 0.0).motion_intent(MotionIntent::CUT))
                 // A win: one burst of stars off the face (rare, so it gets the delight budget).
-                .children(s.moments.won.map(|t| effect(gfx::SPARKLES).key(format!("face-burst{}", s.field)).effect_data([t as f32 + 0.15, 8.0, 7.0, if s.saved.color { 0.0 } else { 1.0 }]).effect_bleed(36.0).absolute(0.0, 0.0).size(sz, sz).inert())),
+                .children(s.moments.won.filter(|_| !reduced).map(|t| effect(gfx::SPARKLES).key(format!("face-burst{}", s.field)).effect_data([t as f32 + 0.15, 8.0, 7.0, if s.saved.color { 0.0 } else { 1.0 }]).effect_bleed(36.0).absolute(0.0, 0.0).size(sz, sz).inert())),
         )
         .hover(p.tile_hover)
 }
 
-fn header(s: &App, p: &Palette, width: f32) -> El {
+fn header(s: &App, p: &Palette, width: f32, reduced: bool) -> El {
     // A review shows its own moment: the mines left then, and the timer then.
     let g = s.shown();
     let (seconds, gold) = match &s.review {
@@ -104,7 +104,7 @@ fn header(s: &App, p: &Palette, width: f32) -> El {
         .center_y()
         .child(led("Mines", s.trf(S::MinesLeft, &[&g.counter()]), g.counter(), p, s.saved.color, false))
         .child(spacer())
-        .child(face_button(s, p))
+        .child(face_button(s, p, reduced))
         .child(spacer())
         .child(led("Time", s.trf(S::Time, &[&seconds]), seconds as i32, p, s.saved.color, gold))
 }
@@ -164,8 +164,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         _ => 0.0,
     };
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
-    let boom = s.moments.boom.map(|(t, at)| (t as f32, at)).filter(|_| live);
     let reduced = cx.system_reduced_motion() || s.reduced;
+    // Reduce Motion leaves out the loss's heat and shockwave and the win's aura: the rim and
+    // the field still say how it went.
+    let boom = s.moments.boom.map(|(t, at)| (t as f32, at)).filter(|_| live && !reduced);
     let board_el = board::view(s, reduced);
     // Small windows and phones: draw the console scaled to fit (layout keeps its size). A
     // hint's callout goes beside it, or over the field clear of the cells it talks about. A
@@ -197,11 +199,11 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .box_shadow(drop(24.0, 60.0, ca(0x000000, 0.7)))
         .box_shadow(inset(1.0, 0.0, ca(0xffffff, 0.08)))
         .child(effect(gfx::RIM).key("rim").effect_data([rim, 3.5, 0.0, 0.0]).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0))
-        .child(header(s, &p, inner_w))
+        .child(header(s, &p, inner_w, reduced))
         .child(board_el)
         .children(fifty_count(s, &p, console_w))
         .children(timeline::tab(s, &p, console_w, console_h));
-    if s.moments.won.is_some() && live {
+    if s.moments.won.is_some() && live && !reduced {
         console = console.child(effect(gfx::AURA).key("aura").effect_data([won_t, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(50.0).absolute(0.0, 0.0).size(console_w, console_h).radius(22.0));
     }
     if let Some((t, _)) = boom {

@@ -19,6 +19,8 @@ pub const GAP: f32 = 2.0;
 pub const TILE: f32 = PITCH - GAP;
 /// The well's inset around the cells.
 pub const WELL: f32 = 6.0;
+/// The pointer lamp's square: its light fades out by the edge.
+pub const LAMP: f32 = 120.0;
 /// The console's padding.
 pub const PAD: f32 = 14.0;
 pub const HEADER_H: f32 = 58.0;
