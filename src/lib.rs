@@ -130,12 +130,21 @@ fn reviewed_game(a: &mut App) {
     a.new_game_now();
 }
 
-/// Plays `moves` hints through with Apply from the opening click at the centre, then shows the
-/// next hint in full: a position a hint-led player reaches, for a hard hint's picture.
-fn hinted(a: &mut App, level: Level, seed: u32, moves: usize) {
+/// Follows hints from the opening click at the centre, opening the `lucky` cells in turn at
+/// each forced guess, then shows the next forced guess's hint in full.
+fn to_guess(a: &mut App, level: Level, seed: u32, lucky: &[usize]) {
     *a = scene(level, seed);
     a.open_at(a.game.idx(a.game.w / 2, a.game.h / 2));
-    for _ in 0..moves {
+    let mut lucky = lucky.iter();
+    for _ in 0..800 {
+        a.press_hint();
+        let Some(s) = &a.hint else { break };
+        if matches!(s.hint.technique, hint::Technique::Guess(_)) {
+            let Some(&c) = lucky.next() else { break };
+            a.hint = None;
+            a.open_at(c);
+            continue;
+        }
         for _ in 0..4 {
             a.press_hint();
         }
@@ -144,7 +153,6 @@ fn hinted(a: &mut App, level: Level, seed: u32, moves: usize) {
     for _ in 0..4 {
         a.press_hint();
     }
-    // A clock that has run as long as such a game takes, not the scene's few seconds.
     a.started_at = a.started_at.map(|t| t - 140.0);
 }
 
@@ -250,12 +258,14 @@ const SCENES: &[(&str, fn(&mut App))] = &[
             a.press_hint();
         }
     }),
-    // Evil hints a hint-led game reaches (found by following hints over 400 seeds): a 13-step
-    // proof by contradiction, and a dependency chain across five numbers.
-    ("hint-evil", |a| hinted(a, Level::Intermediate, 385, 85)),
-    ("hint-chain", |a| hinted(a, Level::Intermediate, 270, 111)),
-    ("hint-evil-zh-cn", |a| {
-        hinted(a, Level::Intermediate, 385, 85);
+    // Forced guesses a hint-led Expert game reaches (found by following hints over 120 seeds,
+    // opening a safe cell at each earlier guess): no cell can be proven, and the hint says how
+    // a strong player chooses. Fewer mines weighs the mines left against the 161 hidden cells
+    // off the numbers; a dead cell, if safe, could only show a 5 and settle nothing.
+    ("guess-fewer", |a| to_guess(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124])),
+    ("guess-dead", |a| to_guess(a, Level::Expert, 2, &[479, 29, 450, 390, 360, 28, 27, 26, 449])),
+    ("guess-fewer-zh-cn", |a| {
+        to_guess(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124]);
         a.set_lang(strings::Lang::ZhCn);
     }),
     ("hint-zh-cn", |a| {
