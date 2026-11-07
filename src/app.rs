@@ -14,7 +14,7 @@ use crate::review::Review;
 use crate::solver::play;
 use crate::storage::{self, Saved};
 use crate::strings::{Lang, S};
-use crate::style::{PITCH, WELL, window_size};
+use crate::style::{LAMP, PITCH, WELL, window_size};
 
 /// The panels the toolbar opens, one at a time.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -41,6 +41,50 @@ impl Press {
         self.middle || (self.left && self.right)
     }
 }
+
+/// A soft light under the pointer, on a render-clock spring: the selector stays exact, the
+/// lamp lags a little, and moving it never re-runs the view.
+pub struct Lamp {
+    /// Its top left, in field points.
+    pub at: Live<[f32; 2]>,
+    pub on: Live<f32>,
+    /// It has a place on the field: until then it snaps there rather than sweeping across.
+    placed: bool,
+}
+
+impl Lamp {
+    fn new() -> Lamp {
+        Lamp { at: Live::new([0.0, 0.0]), on: Live::new(0.0), placed: false }
+    }
+
+    /// Follows the pointer at (x, y) on the field. A jump of more than two cells snaps.
+    pub fn aim(&mut self, x: f32, y: f32, lit: bool) {
+        let to = [x - LAMP / 2.0, y - LAMP / 2.0];
+        let [ax, ay] = self.at.get();
+        if !self.placed || (to[0] - ax).hypot(to[1] - ay) > PITCH * 2.0 {
+            self.at.snap(to);
+        } else {
+            self.at.set(to);
+        }
+        self.placed = true;
+        self.on.set(if lit { 1.0 } else { 0.0 });
+    }
+
+    /// Fades out; the next aim snaps to the pointer.
+    pub fn dim(&mut self) {
+        self.on.set(0.0);
+        self.placed = false;
+    }
+
+    /// Out at once: keys and new fields never animate.
+    fn off(&mut self) {
+        self.on.snap(0.0);
+        self.placed = false;
+    }
+}
+
+/// How many recent pointer turns keep their light wave: quick clicks never cut one short.
+const LIT_TURNS: usize = 4;
 
 /// What the effects need to know about the last few moves.
 #[derive(Clone, Copy, Default, Debug)]
@@ -97,6 +141,11 @@ pub struct App {
     pub hover_at: Live<[f32; 2]>,
     pub hover_on: Live<f32>,
     pub hover_cell: Option<usize>,
+    pub lamp: Lamp,
+    /// The last play came from the pointer. Keys never animate, so their opens get no wave.
+    pub by_pointer: bool,
+    /// The last few turns the pointer opened cells in: their light waves may still be running.
+    pub lit_turns: Vec<u32>,
     /// XYZZY, then Shift: the corner pixel tells mine from safe under the pointer.
     pub xyzzy: usize,
     pub cheat: bool,
@@ -189,6 +238,9 @@ impl App {
             hover_at: Live::new([0.0, 0.0]),
             hover_on: Live::new(0.0),
             hover_cell: None,
+            lamp: Lamp::new(),
+            by_pointer: true,
+            lit_turns: Vec::new(),
             xyzzy: 0,
             cheat: false,
             pixel_safe: false,
@@ -337,6 +389,8 @@ impl App {
         self.banner_done = false;
         self.shock_done = false;
         self.moments = Moments::default();
+        self.lit_turns.clear();
+        self.lamp.off();
     }
 
     /// A Mode from the picker: saved, and a new field at once. The picker stays open, so a
@@ -525,6 +579,12 @@ impl App {
         let forced = opens && self.game.started && play::forced(&self.game);
         self.game.start();
         let out = if chord { self.game.chord(i) } else { self.game.open(i) };
+        if self.by_pointer && out != Outcome::Nothing {
+            if self.lit_turns.len() == LIT_TURNS {
+                self.lit_turns.remove(0);
+            }
+            self.lit_turns.push(self.game.turn);
+        }
         if forced && out != Outcome::Nothing {
             self.record.forced += 1;
             self.record.survived += !matches!(out, Outcome::Lost(_)) as u32;
@@ -542,6 +602,9 @@ impl App {
                 self.started_at = None;
                 self.finish(End::Won);
             }
+        }
+        if self.game.over() {
+            self.lamp.dim();
         }
     }
 
@@ -597,6 +660,7 @@ impl App {
                 if self.game.over() || self.generating.is_some() {
                     return;
                 }
+                self.by_pointer = true;
                 match button {
                     rune::PointerButton::Middle => self.press.middle = true,
                     // Shift with the left button is a chord, as both buttons are.
@@ -611,6 +675,7 @@ impl App {
                 } else {
                     tx.live_only();
                 }
+                self.aim_lamp(d.x, d.y);
                 self.hover(cell, tx);
             }
             rune::Phase::Up => {
@@ -649,6 +714,7 @@ impl App {
             }
             None => {
                 self.hover_on.set(0.0);
+                self.lamp.dim();
             }
         }
         if let Some(i) = cell {
@@ -660,6 +726,12 @@ impl App {
             self.hover_cell = cell;
             tx.live_only();
         }
+    }
+
+    /// The lamp follows the pointer at (x, y) on the field, lit only while the game is on.
+    pub fn aim_lamp(&mut self, x: f32, y: f32) {
+        let lit = !self.game.over() && !self.waits();
+        self.lamp.aim(x, y, lit);
     }
 
     /// When the result banner leaves after the game ends.
@@ -767,6 +839,9 @@ impl App {
         let i = self.hover_cell.unwrap_or(self.game.idx(self.game.w / 2, self.game.h / 2));
         let (x, y) = ((i as isize % w + dx).clamp(0, w - 1), (i as isize / w + dy).clamp(0, h - 1));
         self.hover(Some((y * w + x) as usize), tx);
+        self.hover_at.snap(self.hover_at.get());
+        self.hover_on.snap(self.hover_on.get());
+        self.lamp.off();
     }
 
     pub fn key(&mut self, e: &KeyEvent, tx: &mut Tx) -> bool {
@@ -811,13 +886,16 @@ impl App {
             Key::Text(t) if plain && t == " " && self.hover_cell.is_some() => {
                 let i = self.hover_cell.unwrap();
                 let chord = self.game.cells[i].cover == Cover::Open;
+                self.by_pointer = false;
                 self.release(chord, Some(i));
                 self.wake_clock(tx);
+                tx.instant();
                 true
             }
             Key::Text(t) if plain && t.eq_ignore_ascii_case("f") && self.hover_cell.is_some() => {
                 let i = self.hover_cell.unwrap();
                 self.mark_at(i);
+                tx.instant();
                 true
             }
             // H steps one stage deeper into a hint, at once (keys never animate).

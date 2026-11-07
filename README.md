@@ -27,10 +27,13 @@ Motion follows Emil Kowalski's rule of thumb: the more often you see something, 
 moves. Every animation here had to justify itself (the `remove-animations` skill), and most
 that couldn't were cut.
 
-- **Every click** (hundreds a game): the tile lifts off in 240 ms, rippling out from the click
-  over at most 300 ms. Numbers are there at once; nothing makes you wait to read them. The
-  selector sits on the square under the pointer, with no glide to lag behind it.
-- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2, Escape) never animate.
+- **Every click** (hundreds a game): the tile is gone in the same frame and its number is
+  there at once, never moving; a pool of light runs under the numbers in 250 ms, rippling out
+  from the click over at most 300 ms. A quick next click never cuts the last one's light short.
+  The selector sits on the square under the pointer, with no glide to lag behind it; a soft lamp
+  follows the pointer on a spring, without re-running the view.
+- **Flags**: a 150 ms fade. **Keys** (arrows, Space, F, F2, Escape) never animate: what they
+  open gets no light, and the lamp goes out while they steer.
 - **Panels** (the Level picker, Settings) are opened now and then, so they slide down from the
   toolbar in about 0.2 s; Escape closes one in the same frame.
 - **A new field** from the face or the picker deals in from the centre in under half a second;
@@ -40,9 +43,9 @@ that couldn't were cut.
   sweep the hidden tiles, stopping in the frame the field is ready. Quick fields show nothing
   but the face. With Reduce Motion the light breathes in place instead of travelling.
 - **A loss**: one shockwave through the window and the other mines going off in a 300 ms chain
-  out from the one you hit, then still.
+  out from the one you hit; the console's heat cools in 1.2 s, then the window sleeps.
 - **A win** (rare, so it gets the flourish): flagged tiles turn gold, a swell runs across the
-  field, stars burst off the face and the console glows. Beat your best and the timer turns gold.
+  hidden tiles (numbers stay still), stars burst off the face and the console glows. Beat your best and the timer turns gold.
 - The result banner straddles the field's edge, says how it went, and leaves after 3 s; its
   Review action stays behind as a small tab on the console's bottom rim.
 - **A Review** (from that action, or any game in History) walks the game on the field, with a
@@ -50,11 +53,12 @@ that couldn't were cut.
   could be proven), forced guesses (true 50/50 or not) and clicks a chord would have saved, plus
   3BV, 3BV/s and efficiency. Selecting a marker sets the field to that moment and gives the
   reason as a hint would, in the hint's words and with no odds. Arrow keys step at once; a step
-  forward lifts the tiles that move opened, as a click does.
+  forward lights the cells that move opened, as a click does.
 - Shaders do the backdrop, the liquid-metal rim, the plastic face, the LED glow, the blasts and
   the glow, and hold still when nothing is happening: an idle window draws nothing.
 - Entrances and exits use a strong ease-out; nothing grows from nothing. With Reduce Motion on,
-  travel and bounce are off.
+  travel and bounce are off, and so are the lamp, the shockwave, the blasts, the heat, the stars
+  and the aura: the rim and the field still say how it went.
 - Small windows and phones get the whole console, scaled to fit.
 
 Motion is checked with Rune's motion gate (pops, jumps, snaps, overshoot that wasn't meant):

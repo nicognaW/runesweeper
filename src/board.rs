@@ -1,7 +1,9 @@
 //! The minefield: tiles, the numbers under them, the selector and the board's own effects.
 //!
 //! Each cell has at most one cover element for its whole life in a field (`t{field}-{i}`), so
-//! dealing, lifting off and the win wave are one element changing its sequence, never a swap.
+//! dealing and the win wave are one element changing its sequence, never a swap. An opened
+//! cell's cover goes in the frame it opens, so its number reads at once; the pointer's opens
+//! get a pool of light beneath the numbers instead. Only a mine's cover lifts off.
 
 use rune::{Beat, Color, Cursor, El, MotionIntent, PointerButton, Sequence, Spring, Transition, effect, el, text};
 use rune_motion::Easing;
@@ -15,8 +17,10 @@ use crate::style::*;
 
 /// Emil Kowalski's strong ease-out: for everything entering or leaving.
 const OUT: Easing = Easing::cubic(0.23, 1.0, 0.32, 1.0);
-/// A tile lifting off as its cell opens: a quick swell, then gone (240 ms).
+/// A mine's tile lifting off as the chain reaches it: a quick swell, then gone (240 ms).
 const VANISH: &[Beat] = &[Beat::new(0.0), Beat::new(0.06).scale(1.06).easing(OUT), Beat::new(0.24).opacity(0.0).scale(0.85).easing(OUT)];
+/// A pool of light under newly opened numbers, which never move (250 ms).
+const REVEAL: &[Beat] = &[Beat::new(0.0).opacity(0.46).scale(0.97), Beat::new(0.25).opacity(0.0).easing(OUT)];
 /// A mine coming up as the chain reaches it (220 ms).
 const POP: &[Beat] = &[Beat::new(0.0).opacity(0.0).scale(0.6), Beat::new(0.22).easing(Easing::OVERSHOOT)];
 /// A new field dealing its tiles in (220 ms each).
@@ -77,16 +81,17 @@ fn raised(p: &Palette, sunk: bool, light: f32, gold: bool) -> El {
         .box_shadow(drop(1.5, 3.0, ca(0x000000, 0.55)))
         .box_shadow(inset(1.0, 0.0, p.tile_light))
         .box_shadow(inset(-1.0, 1.0, ca(0x000000, 0.25)))
-        .hover(p.tile_hover)
 }
 
-/// A number with a soft halo of its own colour.
+/// A number with a soft halo of its own colour, there in the frame its cell opens.
 fn number(n: u8, p: &Palette) -> El {
     let ink = p.numbers[n as usize];
     el().size(TILE, TILE)
         .center()
-        .child(el().absolute(0.0, 0.0).size(TILE, TILE).radial_gradient([0.5, 0.52], TILE * 0.5, [(0.0, ink.alpha(0.26)), (1.0, ink.alpha(0.0))]))
-        .child(text(n.to_string()).font(NUMBER).color(ink))
+        .transition(Transition::none())
+        .motion_intent(MotionIntent::CUT)
+        .child(el().absolute(0.0, 0.0).size(TILE, TILE).radial_gradient([0.5, 0.52], TILE * 0.5, [(0.0, ink.alpha(0.26)), (1.0, ink.alpha(0.0))]).transition(Transition::none()))
+        .child(text(n.to_string()).font(NUMBER).color(ink).transition(Transition::none()))
 }
 
 pub fn view(s: &App, reduced: bool) -> El {
@@ -127,16 +132,18 @@ pub fn view(s: &App, reduced: bool) -> El {
         if open {
             // The mine stepped on, and any others a wrong chord uncovered.
             let is_hit = lost && c_.mine && c_.cover == Cover::Open;
-            let mut cell = el().key(format!("o{f}-{i}")).absolute(x, y).size(TILE, TILE).radius(4.0).center();
+            let mut cell = el().key(format!("o{f}-{i}")).absolute(x, y).size(TILE, TILE).radius(4.0).center().transition(Transition::none()).motion_intent(MotionIntent::CUT);
             cell = if is_hit {
                 cell.radial_gradient([0.5, 0.5], TILE * 0.75, [(0.0, p.hit_core), (1.0, p.hit)])
             } else {
                 cell.fill(p.open).border(1.0, p.open_edge).box_shadow(inset(1.0, 2.0, ca(0x000000, 0.35)))
             };
-            let fresh = c_.turn == g.turn && c_.cover == Cover::Open;
+            // Opened by one of the pointer's last few turns (a review: by the move just
+            // stepped to): its light wave may still run.
+            let lit = !reduced && c_.cover == Cover::Open && if live { s.lit_turns.contains(&c_.turn) } else { c_.turn == g.turn };
             if c_.mine || wrong_flag {
                 let d = boom(i);
-                if c_.mine {
+                if c_.mine && !reduced {
                     // The blast behind each mine as the chain reaches it.
                     let blast = el().key(format!("b{f}-{i}")).absolute(-6.0, -6.0).size(TILE + 12.0, TILE + 12.0).radius(TILE).radial_gradient(
                         [0.5, 0.5],
@@ -149,15 +156,19 @@ pub fn view(s: &App, reduced: bool) -> El {
                 let m = mine(TILE * 0.78, ink);
                 let m = if wrong_flag { el().size(TILE, TILE).center().child(m.opacity(0.55)).child(cross(TILE * 0.8, p.flag).absolute(TILE * 0.1, TILE * 0.1)) } else { m };
                 cell = cell.child(with_seq(m.key(format!("m{f}-{i}")), POP, d, still).motion_intent(MotionIntent::BOUNCE));
-            } else if c_.adj > 0 {
-                let n = number(c_.adj, &p).key(format!("n{f}-{i}"));
-                let n = if won && !fresh { with_seq(n, WAVE, wave(i), still) } else { n };
-                cell = cell.child(n.motion_intent(MotionIntent::BOUNCE));
+            } else {
+                if lit {
+                    cell = cell.child(reveal_light(f, i, &p, ripple(i)));
+                }
+                // The number stays still, the win's sweep included: information never moves.
+                if c_.adj > 0 {
+                    cell = cell.child(number(c_.adj, &p).key(format!("n{f}-{i}")));
+                }
             }
             opens.push(cell);
-            // The tile that was here lifts off, in a ripple out from the click (or the blast).
-            if (fresh || shown_mine) && !reduced {
-                let d = if shown_mine { (boom(i) - 0.1).max(0.0) } else { ripple(i) };
+            // A mine's tile lifts off as the blast reaches it.
+            if shown_mine && !reduced {
+                let d = (boom(i) - 0.1).max(0.0);
                 covers.push(
                     with_seq(raised(&p, false, light(i), false).key(format!("t{f}-{i}")).absolute(x, y), VANISH, d, false)
                         .motion_intent(MotionIntent::BOUNCE)
@@ -168,18 +179,21 @@ pub fn view(s: &App, reduced: bool) -> El {
             continue;
         }
         let gold = won && c_.cover == Cover::Flag;
-        let tile = raised(&p, sunk.contains(&i), light(i), gold).key(format!("t{f}-{i}")).absolute(x, y).center();
+        // Gone in the frame its cell opens, never fading over the number.
+        let tile = raised(&p, sunk.contains(&i), light(i), gold).key(format!("t{f}-{i}")).absolute(x, y).center().transition(Transition::none());
         let tile = match c_.cover {
             Cover::Flag => tile.child(
                 flag(TILE * 0.92, p.flag, p.pole())
                     .key(format!("f{f}-{i}"))
-                    .transition(Transition::opacity().springs(QUICK)),
+                    .transition(Transition::opacity().springs(QUICK))
+                    // F places it at once: keys never animate.
+                    .motion_intent(MotionIntent::CUT),
             ),
-            Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::opacity().springs(QUICK))),
+            Cover::Question => tile.child(text("?").key(format!("q{f}-{i}")).font(NUMBER).color(p.text).transition(Transition::opacity().springs(QUICK)).motion_intent(MotionIntent::CUT)),
             _ => tile,
         };
         let tile = if won { with_seq(tile, WAVE, wave(i), still) } else { with_seq(tile, DEAL, deal(i), still || !s.deal) };
-        covers.push(tile.motion_intent(MotionIntent::BOUNCE));
+        covers.push(tile.motion_intent(MotionIntent::BOUNCE | MotionIntent::CUT));
     }
 
     let won_t = s.moments.won.map(|t| t as f32).unwrap_or(-100.0);
@@ -209,6 +223,7 @@ pub fn view(s: &App, reduced: bool) -> El {
         .on_secondary_press_local(|s: &mut App, e, tx| s.on_board_secondary(e.x, e.y, tx))
         .on_pointer_move_local(|s: &mut App, e, tx| {
             let c = s.cell_at(e.x, e.y);
+            s.aim_lamp(e.x, e.y);
             s.hover(c, tx)
         })
         .on_hover_change(|s: &mut App, inside, tx| {
@@ -231,11 +246,28 @@ pub fn view(s: &App, reduced: bool) -> El {
                 .inert(),
         );
     }
+    // The lamp: light on the tiles under the pointer, lagging a little behind it.
+    if !reduced {
+        board = board.child(
+            el().key("lamp")
+                .absolute(0.0, 0.0)
+                .size(LAMP, LAMP)
+                .pixel_snap(false)
+                .radial_gradient([0.5, 0.5], LAMP / 2.0, [(0.0, p.accent.alpha(0.10)), (0.35, p.tile_light.alpha(0.04)), (1.0, Color::TRANSPARENT)])
+                .live_offset(s.lamp.at.smooth(Spring::new(0.16, 0.0)))
+                .live_opacity(s.lamp.on.smooth(Spring::new(0.12, 0.0)).rest(Spring::new(0.18, 0.0)))
+                // Entering the field and big jumps snap it before it fades in.
+                .motion_intent(MotionIntent::STEP | MotionIntent::IMPULSE)
+                .inert(),
+        );
+    }
     // The hint's numbers and cell, ringed.
     board = board.children(crate::callout::rings(s, &p));
     // The selector sits on the cell under the pointer, without re-running the view.
     board = board.child(
         el().key("selector")
+            // Arrow keys move it at once.
+            .motion_intent(MotionIntent::STEP | MotionIntent::CUT)
             .absolute(0.0, 0.0)
             .size(TILE, TILE)
             .radius(5.0)
@@ -245,17 +277,32 @@ pub fn view(s: &App, reduced: bool) -> El {
             .inert()
             .child(effect(gfx::SELECT).effect_data([0.6, if s.saved.color { 0.0 } else { 1.0 }, 0.0, 0.0]).effect_bleed(12.0).absolute(0.0, 0.0).size(TILE, TILE).radius(5.0)),
     );
-    board = board.child(
-        effect(gfx::SPARKLES)
-            .key("burst")
-            .effect_data([won_t, if won { 30.0 } else { 0.0 }, 9.0, if s.saved.color { 0.0 } else { 1.0 }])
-            .effect_bleed(40.0)
-            .absolute(0.0, 0.0)
-            .size(bw, bh)
-            .radius(12.0)
-            .inert(),
-    );
+    // Stars off the won field; Reduce Motion leaves them out.
+    if won && !reduced {
+        board = board.child(
+            effect(gfx::SPARKLES)
+                .key("burst")
+                .effect_data([won_t, 30.0, 9.0, if s.saved.color { 0.0 } else { 1.0 }])
+                .effect_bleed(40.0)
+                .absolute(0.0, 0.0)
+                .size(bw, bh)
+                .radius(12.0)
+                .inert(),
+        );
+    }
     board.children(banner(s, &p, bw, bh, reduced))
+}
+
+/// The light under a cell the pointer opened, in a ripple out from the click.
+fn reveal_light(f: u32, i: usize, p: &Palette, delay: f64) -> El {
+    el().key(format!("reveal{f}-{i}"))
+        .absolute(0.0, 0.0)
+        .size(TILE, TILE)
+        .radius(4.0)
+        .radial_gradient([0.5, 0.5], TILE * 0.75, [(0.0, p.accent), (1.0, Color::TRANSPARENT)])
+        .sequence(Sequence::new(REVEAL).delay(delay))
+        .transition(Transition::none())
+        .inert()
 }
 
 /// The line that says how it went, over the bottom of the field.

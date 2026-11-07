@@ -41,6 +41,8 @@ mod max_guess_tests;
 #[cfg(test)]
 mod review_tests;
 #[cfg(test)]
+mod motion_tests;
+#[cfg(test)]
 mod test_fields;
 
 /// README's Layout section names every source file and folder, so an agent can find its way.

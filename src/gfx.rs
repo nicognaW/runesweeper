@@ -28,6 +28,8 @@ pub const AURA: u32 = 9;
 pub const SELECT: u32 = 11;
 /// data: [t0, 0, 0, 0]: a red flash that cools.
 pub const HEAT: u32 = 12;
+/// How long the heat takes to cool completely (seconds); the window sleeps after it.
+pub const HEAT_FOR: f32 = 1.2;
 /// data: [t0, colour index, 0, 0]: a slow band of light across the hidden tiles while a field
 /// is generated, from off its left edge at t0; with Reduce Motion it breathes in place.
 pub const SWEEP: u32 = 13;
@@ -88,10 +90,11 @@ fn layer(kind: u32, d: [f32; 4], shape: Shape, origin: [f32; 2], t: f32) -> Opti
         }
         SELECT => Fx::glow(GlowParams { style: GlowStyle::Neon, color: if d[1] > 0.5 { rgb(0xd0d0d0) } else { rgb(0x6aa8ff) }, intensity: d[0], radius: 7.0, occlusion: 0.0, ..Default::default() }),
         HEAT => {
-            let heat = (-(t - d[0]).max(0.0) / 0.9).exp();
-            if heat < 0.01 {
+            let since = (t - d[0]).max(0.0);
+            if since >= HEAT_FOR {
                 return None;
             }
+            let heat = (-since / 0.26).exp();
             Fx::glow(GlowParams { style: GlowStyle::Neon, color: if d[1] > 0.5 { rgb(0xc8c8c8) } else { rgb(0xff2d2d) }, radius: 26.0, intensity: 1.3, heat, ..Default::default() })
         }
         SWEEP => Fx::shimmer(ShimmerParams {
@@ -131,6 +134,8 @@ impl Compositor<App> for Gfx {
         let mut slots: Vec<FxSlot> = Vec::new();
         // Reduce Motion stills the sweep's band, but it still breathes, so it keeps frames coming.
         let mut sweeping = false;
+        // The heat's cooling is ours, not rune-fx's: it keeps frames coming until it is cold.
+        let mut cooling = false;
         for (n, i) in f.rt.instances.iter().enumerate() {
             if i.params[1] != KIND_EFFECT {
                 continue;
@@ -142,11 +147,12 @@ impl Compositor<App> for Gfx {
             let shape = if kind == FACE { Shape::circle(x + w / 2.0, y + h / 2.0, w.min(h) / 2.0) } else { Shape::rounded(x, y, w, h, r) };
             let Some(l) = layer(kind, i.uv, shape, [x, y], t) else { continue };
             sweeping |= kind == SWEEP;
+            cooling |= kind == HEAT;
             at.push(n as u32);
             layers.push(l.reduced(reduced));
             slots.push(FxSlot::default().scale(k).clip(i.clip, i.fade));
         }
-        self.live = sweeping || layers.iter().any(|l| l.is_animating());
+        self.live = sweeping || cooling || layers.iter().any(|l| l.is_animating());
         let fx = self.fx.get_or_insert_with(|| FxRenderer::new(device, f.format, FxOptions { dither: true }));
         fx.set_srgb_blend(f.srgb_blend());
         fx.add_format(device, wgpu::TextureFormat::Rgba16Float);
@@ -166,5 +172,17 @@ impl Compositor<App> for Gfx {
                 EffectPhase::Draw(pass) => fx.draw_layer_in(pass, s.format, s.origin, k),
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_heat_cools_completely_then_is_gone() {
+        let shape = Shape::rounded(0.0, 0.0, 100.0, 100.0, 12.0);
+        assert!(layer(HEAT, [0.0; 4], shape, [0.0; 2], HEAT_FOR - 0.1).is_some(), "still cooling");
+        assert!(layer(HEAT, [0.0; 4], shape, [0.0; 2], HEAT_FOR).is_none(), "cold: nothing keeps the window awake");
     }
 }
