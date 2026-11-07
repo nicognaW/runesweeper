@@ -316,6 +316,23 @@ impl S {
 mod tests {
     use super::*;
 
+    /// The player is assumed to know Minesweeper (spec: "All help text is removed"), so no string
+    /// tells them which control to use. Hints may still say what to do on the field.
+    #[test]
+    fn no_string_explains_the_controls() {
+        const EN: &[&str] = &["f2", "the face", "press", "tap ", "right-click", "try again", "how to", "shortcut"];
+        const ZH: &[&str] = &["按", "右键", "笑脸", "再来", "快捷"];
+        for &k in S::ALL {
+            let (en, zh) = (k.get(Lang::En).to_lowercase(), k.get(Lang::ZhCn));
+            for w in EN {
+                assert!(!en.contains(w), "{k:?} explains the controls ({w:?}): {en:?}");
+            }
+            for w in ZH {
+                assert!(!zh.contains(w), "{k:?} explains the controls ({w:?}): {zh:?}");
+            }
+        }
+    }
+
     #[test]
     fn every_english_string_has_a_zh_cn_entry_with_the_same_slots() {
         for &k in S::ALL {

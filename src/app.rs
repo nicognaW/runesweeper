@@ -565,9 +565,9 @@ impl App {
         }
         if panel == Panel::Picker {
             let (w, h, m) = self.saved.custom;
-            self.edit_w = TextEdit::new(&w.to_string());
-            self.edit_h = TextEdit::new(&h.to_string());
-            self.edit_m = TextEdit::new(&m.to_string());
+            self.edit_w = TextEdit::new(w.to_string());
+            self.edit_h = TextEdit::new(h.to_string());
+            self.edit_m = TextEdit::new(m.to_string());
         }
         if panel == Panel::History {
             self.history_filter = (self.mode, self.level);

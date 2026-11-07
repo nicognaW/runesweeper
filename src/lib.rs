@@ -43,6 +43,21 @@ mod review_tests;
 #[cfg(test)]
 mod test_fields;
 
+/// README's Layout section names every source file and folder, so an agent can find its way.
+#[cfg(test)]
+#[test]
+fn readme_layout_names_every_source_file() {
+    let readme = include_str!("../README.md");
+    let layout = &readme[readme.find("## Layout").expect("README has a Layout section")..];
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for entry in std::fs::read_dir(&src).unwrap() {
+        let name = entry.unwrap().file_name().into_string().unwrap();
+        let named = if src.join(&name).is_dir() { format!("`src/{name}/") } else { format!("`src/{name}`") };
+        let covered = layout.contains(&named) || (name.ends_with("_tests.rs") && layout.contains("`src/*_tests.rs`"));
+        assert!(covered, "README's Layout section doesn't mention {named}");
+    }
+}
+
 use app::App;
 use game::Level;
 use rune::AppSpec;
@@ -164,7 +179,7 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     ("max-guess-forced", |a| {
         SCENES.iter().find(|s| s.0 == "max-guess").unwrap().1(a);
         if let Some(&(x, y)) = a.fifty_fifties.first() {
-            let _ = a.open_at(if a.game.cells[x].mine { x } else { y });
+            a.open_at(if a.game.cells[x].mine { x } else { y });
             a.moments.boom = Some((0.05, a.cell_center(a.game.hit.unwrap_or(x))));
         }
     }),

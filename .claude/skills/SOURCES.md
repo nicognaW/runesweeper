@@ -40,4 +40,4 @@ cursor/plugins' `thermos` launches two subagents, which are in `.claude/agents/`
 
 `matt-prototype` is mattpocock/skills' `prototype` and `emil-prototype` is emilkowalski/skill's; their
 `name` fields and the two places that link to them (`ask-matt`, `break-ui`) say so. Nothing else was
-changed from upstream.
+changed from upstream, except `implement-spec`, which adds the **brief** (step 3) and its API pointers (step 5).

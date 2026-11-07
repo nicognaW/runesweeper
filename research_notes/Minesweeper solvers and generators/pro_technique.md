@@ -12,7 +12,7 @@
 >
 > All solutions marked **[derived]** come from working through the constraints by hand. All ASCII diagrams are mine; the sources use PNG images, which I did not copy.
 
-Diagram notation used throughout: `#` = unopened cell, `F` = flag/known mine, `.` = opened blank, `|` or `===` = wall/board edge or an already-cleared row. `M` = deduced mine, `S` = deduced safe.
+Diagram notation used throughout: `#` = unopened cell, `F` = flag/known mine, `.` = opened blank, `|` or `===` = wall/board edge or an already-cleared row. `M` = deduced mine, `S` = deduced safe. `?` = an open number the diagram's deduction doesn't read.
 
 ---
 
@@ -88,19 +88,124 @@ minesweeper.online has a 28-entry catalogue in these groups:
   - **1–2–1R**: "2–3–2 turns into the 1–2–1 pattern."
   - Source: [minesweeper.online: Patterns](https://minesweeper.online/help/patterns)
 - **Holes H1, H2, H3** (minesweeper.online): all three have the same text: "Look at the bottom 1. It touches the two yellow cells, so they contain one mine. Now look at the top 1. It also touches the two yellow cells, so it already has a mine and all the remaining cells can be opened." They differ only in the picture: the geometry of the hole. So holes are the 1–1+ subset rule applied across a hole in the frontier. — [minesweeper.online: Patterns](https://minesweeper.online/help/patterns)
+  - Layouts, here and for the triangles and the high-complexity group: each grid is the fixture for that pattern in `src/hint/tests/catalogue.rs` (which `src/hint/patterns.rs` recognises), cropped to the cells around the numbers the pattern reads. Legend: a digit is a number the pattern reads; `?` an open number it doesn't read; `.` an opened blank; `#` hidden and not settled; `S` proven safe and `M` proven mine by the read numbers together (checked by enumerating them); `|` or `===` a wall. None of these patterns has a read number touching a wall, so no wall is drawn. Where a fixture follows a diagram, the source cites its last step, `https://minesweeper.online/img/help/<code>/<n>.png`, which shows the same numbers and hidden cells with the solution marked; the fixture's other numbers can differ, since it fills in the field around the diagram so that it is consistent.
+  - **H1**: the bottom 1's two cells lie either side of the top 1.
+    ```
+    S S S
+    # 1 #
+    ? 1 ?
+    . . .
+    ```
+    Source: minesweeper.online diagram h1/4 (fixture `hole_1`).
+  - **H2**: the bottom 1's two cells lie either side of the bottom 1 itself, so the hole is one row deeper.
+    ```
+    S S S
+    ? 1 ?
+    # 1 #
+    ? ? ?
+    ```
+    Source: minesweeper.online diagram h2/4 (fixture `hole_2`).
+  - **H3**: the two 1s are two apart; the bottom 1's two cells are the cell between them and one beside it.
+    ```
+    S S S
+    ? 1 S
+    ? # #
+    ? 1 ?
+    . . .
+    ```
+    Source: minesweeper.online diagram h3/4 (fixture `hole_3`).
 - **Triangles T1–T5** (minesweeper.online) **[corrected after primary check]**. The first version said only that "entries start from a 1 at the bottom", with the excerpt cut off. The full logic:
   - **T1**: subset rule with three cells. "It touches the three yellow cells, so they contain one mine ... the top 1 ... already has a mine and all the remaining cells can be opened."
+    Layout: the bottom 1's three cells are both cells beside the top 1 and one beside the bottom 1, so the open cells come to a point.
+    ```
+    S S S
+    # 1 #
+    # 1 ?
+    ? ? .
+    ```
+    Source: minesweeper.online diagram t1/4 (fixture `triangle_1`).
   - **T2**: "The purple cells ... contain a maximum of one mine, because they touch 1 ... [the 2 has] a mine in the remaining cell. If you put the flag, you can see that there is one mine in the purple cells. So 1 already has a mine and all the remaining cells can be opened." This is a two-step chain: a 1-2C-style bound, then 1-1+.
+    Layout: the 2 below the 1 shares three cells with it, coming to a point as in T1; the 2's one cell of its own is the mine.
+    ```
+    S S S
+    # 1 #
+    # 2 ?
+    M ? .
+    ```
+    Source: minesweeper.online diagram t2/5 (fixture `triangle_2`).
   - **T3**: the same with a 2 and a 3: "a maximum of two mines ... there must be a mine in the remaining cell", then the 2 is satisfied.
+    Layout: T2's shape with a 3 below a 2.
+    ```
+    S S S
+    # 2 #
+    # 3 ?
+    M ? .
+    ```
+    Source: minesweeper.online diagram t3/5 (fixture `triangle_3`).
   - **T4**: a 2 and a 4: "there must be two mines in the remaining cells", then the 2 is satisfied.
+    Layout: the 4 beside the 2 shares three cells with it, both beside the 2 and one beside the 4; the 4's two cells of its own are mines and the 2's own cells are safe.
+    ```
+    S # # M
+    S 2 4 ?
+    S # ? M
+    ```
+    Source: minesweeper.online diagram t4/5 (fixture `triangle_4`).
   - **T5**: like T2 with a different geometry: "a mine in the remaining third cell".
+    Layout: the 2 below the 1 shares only the two cells either side of the 2; the 2's one cell of its own is the mine.
+    ```
+    S S S
+    ? 1 ?
+    # 2 #
+    M ? ?
+    ```
+    Source: minesweeper.online diagram t5/5 (fixture `triangle_5`).
   - Source: [minesweeper.online: Patterns](https://minesweeper.online/help/patterns)
 - **High-complexity group** (minesweeper.online):
   - **1–3–1 corner**: two disjoint pairs, each "a maximum of one mine" because each touches a 1, "so the third mine must be in the last corner cell", and then each pair holds exactly one.
+    Layout: the 3 with a 1 beside it along each side of its corner; each 1 shares two cells with the 3, and the 3's last cell is the corner cell.
+    ```
+    S # # M
+    ? 1 3 #
+    . . 1 #
+    . . ? S
+    ```
+    Source: minesweeper.online diagram 1-3-1/7 (fixture `corner_131`).
   - **2–2–2 corner** (the only 2-2-2 pattern in either catalogue): two pairs that each "can't both be empty, because that would overflow the 2. So they contain a minimum of one mine"; "The purple and orange cells contain a minimum of two mines, so 2 already has mines and the last corner cell can be opened." This is the **minimum-bound** counterpart of 1-2C's maximum bound.
+    Layout: the 1-3-1 corner's shape with three 2s. Each outer 2 has one cell of its own, so it shares at least one mine with the middle 2; the corner cell is safe and the outer 2s' own cells are mines.
+    ```
+    M # # S
+    ? 2 2 #
+    . . 2 #
+    . . ? M
+    ```
+    Source: built from the described rule (fixture `corner_222`).
   - **1>2<1**: a 2 whose two mines must be split, one in each 1's region, "Therefore, all the remaining cells can be opened."
+    Layout: the 2 is one row below the two 1s and between them; it shares two cells with each 1, and each pair holds one mine, so everything else around the 1s is safe.
+    ```
+    S S S # S S S
+    S 1 # ? # 1 S
+    S S # 2 # S S
+    # ? ? ? ? ? #
+    ```
+    Source: built from the described rule (fixture `staggered_121`).
   - **T–pattern**: combines two 1-pairs, a 2, and a 3. "The yellow and orange cells contain a maximum of two mines, so the third mine must be in the last corner cell."
+    Layout: a 3 and a 2 side by side, a 1 below the 3 and a 1 two rows below the 2; the 3's last mine is its top-left corner cell, and the 2's cells on the right are safe.
+    ```
+    M # # S
+    ? 3 2 S
+    # 1 # #
+    ? ? 1 ?
+    . . . .
+    ```
+    Source: minesweeper.online diagram tp/6 (fixture `t_pattern`).
   - **Dependency Chain**: "Usually long dependency chains can be resolved by parsing from both sides." The example tracks one-mine regions from the top and from the bottom until a 2 links them.
+    Layout: the recogniser calls any deduction that reads five or more numbers a dependency chain. The fixture is a row 1-2-2-2-2-1 between two hidden rows; five of its numbers (all but the second 2 from the right) prove the cells at both ends, and the two cells above and below the first 2, safe.
+    ```
+    S # S # # # # S
+    S 1 2 2 ? 2 1 S
+    S # S # # # # S
+    ```
+    Source: built from the described rule (fixture `dependency_chain`).
   - Source: [minesweeper.online: Patterns](https://minesweeper.online/help/patterns)
 - **Last-turns group** (minesweeper.online):
   - **Mine counting**: "When the game comes to an end, you can determine empty cells by the number of remaining mines ... The colored cells contain 6 mines in total, just as much as the number of remaining mines. Therefore, cells marked with green circles can be opened."
@@ -166,7 +271,7 @@ The "Evil" entries chain these bounds; "Combinations" is case enumeration.
 
 ### Gaps
 - No "box" pattern under that name appears on either catalogue. Enclosed 2x2 50/50s are taught under "50/50" (section 3), not as logical patterns.
-- I read the text of each minesweeper.online entry, but not the PNG diagrams (/img/help/<name>/<n>.png). The exact cell geometry of H1–H3, T1–T5 and the high-complexity entries is not recorded here. Downloading those images would settle it.
+- The layouts of H1–H3, T1–T5 and the high-complexity entries are now recorded under each entry, from the hint fixtures. The 2–2–2 corner, 1>2<1 and Dependency Chain layouts were built from the described rule, not from a diagram. On 2026-11-07, `img/help/2-2-2/<n>.png` (steps 0–6) and `img/help/dc/<n>.png` (steps 0–8) were found to exist, but those two layouts have not been compared with them. No image code was found for 1>2<1.
 - Neither pattern page names an author. minesweepergame.com's About page says the site "is a non-profit site run by 'thefinerminer'". Its Media page describes Damien Moore as the person "who created Authoritative Minesweeper in 2000". The strategy pages carry no byline. — [minesweepergame.com: About](https://minesweepergame.com/about.php); [minesweepergame.com: Media](https://minesweepergame.com/media.php)
 
 ---
@@ -427,7 +532,7 @@ Checked 2026-11-06 against the live pages. Method: curl with a browser user agen
 - The Murański first-person advice.
 
 **Still unverified:**
-- The ASCII geometry of the minesweeper.online images (PNG only).
+- The 2–2–2 corner and Dependency Chain layouts against their diagrams (`2-2-2/<n>`, `dc/<n>`), and the 1>2<1 diagram, whose code was not found.
 - The source of "95% of Expert boards need guessing".
 - Ju's fan-wiki style and grip data.
 - The Polish Murański interview.

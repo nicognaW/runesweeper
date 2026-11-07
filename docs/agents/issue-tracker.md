@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+In a Claude Code cloud session, `gh` reaches only search: use the `mcp__github__*` tools (`issue_read`, `issue_write`, `add_issue_comment`) for the operations below. `issue_read` with `get_sub_issues` returns every child's full body and can overflow context; read a spec's tickets one at a time with `get`, taking their numbers from the spec's sub-issue list or `list_issues` with `fields: [number, title, state]`.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.

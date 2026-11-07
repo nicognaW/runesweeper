@@ -29,6 +29,14 @@ wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["Window", "Storage", "Location", "Navigator", "Worker", "WorkerOptions", "WorkerType", "MessageEvent"] }
 js-sys = "0.3"
 
+# CI runs `cargo clippy --all-targets -- -D warnings`. Allowed here, for this code's shape:
+# parallel per-cell arrays read best indexed, tables of scenes and test paths are typed inline,
+# and `View::len` counts a grid's cells, which is never empty.
+[lints.clippy]
+needless_range_loop = "allow"
+type_complexity = "allow"
+len_without_is_empty = "allow"
+
 [profile.dev.package."*"]
 opt-level = 2
 debug = false

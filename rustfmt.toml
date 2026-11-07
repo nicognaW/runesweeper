@@ -1,0 +1,3 @@
+# This code is hand-formatted (dense one-line items, wide lines), so `cargo fmt` is a no-op here.
+# Match the surrounding style instead.
+disable_all_formatting = true

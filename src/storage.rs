@@ -395,10 +395,7 @@ mod tests {
 
     #[test]
     fn settings_round_trip() {
-        let mut s = Saved::default();
-        s.level = Level::Expert;
-        s.custom = (20, 12, 50);
-        s.marks = false;
+        let s = Saved { level: Level::Expert, custom: (20, 12, 50), marks: false, ..Saved::default() };
         let back = Saved::parse(&s.write());
         assert_eq!(back.level, Level::Expert);
         assert_eq!(back.custom, (20, 12, 50));

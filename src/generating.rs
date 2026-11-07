@@ -67,7 +67,7 @@ pub fn from_mask(w: usize, h: usize, mask: &[u8]) -> Game {
 mod imp {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::mpsc::{Receiver, TryRecvError, channel};
+    use std::sync::mpsc::{Receiver, channel};
 
     use super::*;
 
@@ -86,21 +86,17 @@ mod imp {
                 .spawn(move || {
                     let g = generate::stoppable(stopped.clone(), || lay(mode, dims, seed, first));
                     // A cancelled field lands nowhere and wakes nobody.
-                    if !stopped.load(Ordering::Relaxed) && send.send(g).is_ok() {
-                        if let Some(wake) = wake {
+                    if !stopped.load(Ordering::Relaxed) && send.send(g).is_ok()
+                        && let Some(wake) = wake {
                             wake();
                         }
-                    }
                 })
                 .expect("a thread to generate on");
             Job { field, stop }
         }
 
         pub fn take(&mut self) -> Option<Game> {
-            match self.field.try_recv() {
-                Ok(g) => Some(g),
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => None,
-            }
+            self.field.try_recv().ok()
         }
 
         pub fn wait(self) -> Game {

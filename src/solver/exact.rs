@@ -152,7 +152,7 @@ pub fn odds(v: &View, facts: &[Fact]) -> Result<Odds, Error> {
 
     let all = convolve(dists.iter().map(|d| &d.w[..]));
     let total: f64 = all.iter().enumerate().map(|(m, &w)| w * f(m)).sum();
-    if !(total > 0.0) {
+    if total.is_nan() || total <= 0.0 {
         return Err(Error::Inconsistent);
     }
 
@@ -173,9 +173,7 @@ pub fn odds(v: &View, facts: &[Fact]) -> Result<Odds, Error> {
         if v.open[i].is_none() && facts[i] == Fact::Mine {
             out.p[i] = 1.0;
             out.mine[i] = true;
-        } else if v.open[i].is_none() && facts[i] == Fact::Safe {
-            out.safe[i] = true;
-        } else if v.open[i].is_some() {
+        } else if v.open[i].is_some() || facts[i] == Fact::Safe {
             out.safe[i] = true;
         }
     }

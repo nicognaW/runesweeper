@@ -230,7 +230,8 @@ don't allow republishing are installed with `scripts/install-skills.sh`.
   (`logic.rs`), the named patterns (`patterns.rs`), guesses (`guess.rs`) and the words
   (`words.rs`); zh-CN pattern names in `src/zh_cn_terms.md`.
 - `src/record.rs`: a game record and its one-line format; 3BV and the fastest win.
-- `src/review.rs`: Review as data: markers, their reasons and the speed figures, from a record.
+- `src/review.rs`: Review as data: markers, their reasons and the speed figures, from a record
+  (tests in `src/review/tests.rs`).
 - `src/storage.rs`: settings, History and the game in play, on disk or in browser storage; the
   local time offset for History's dates.
 - `src/strings.rs`, `src/locale.rs`: every string in English and zh-CN, and the system's language.
