@@ -130,6 +130,24 @@ fn reviewed_game(a: &mut App) {
     a.new_game_now();
 }
 
+/// Plays `moves` hints through with Apply from the opening click at the centre, then shows the
+/// next hint in full: a position a hint-led player reaches, for a hard hint's picture.
+fn hinted(a: &mut App, level: Level, seed: u32, moves: usize) {
+    *a = scene(level, seed);
+    a.open_at(a.game.idx(a.game.w / 2, a.game.h / 2));
+    for _ in 0..moves {
+        for _ in 0..4 {
+            a.press_hint();
+        }
+        a.apply_hint();
+    }
+    for _ in 0..4 {
+        a.press_hint();
+    }
+    // A clock that has run as long as such a game takes, not the scene's few seconds.
+    a.started_at = a.started_at.map(|t| t - 140.0);
+}
+
 const SCENES: &[(&str, fn(&mut App))] = &[
     ("beginner", |a| *a = scene(Level::Beginner, 7)),
     ("intermediate", |a| {
@@ -231,6 +249,14 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         for _ in 0..4 {
             a.press_hint();
         }
+    }),
+    // Evil hints a hint-led game reaches (found by following hints over 400 seeds): a 13-step
+    // proof by contradiction, and a dependency chain across five numbers.
+    ("hint-evil", |a| hinted(a, Level::Intermediate, 385, 85)),
+    ("hint-chain", |a| hinted(a, Level::Intermediate, 270, 111)),
+    ("hint-evil-zh-cn", |a| {
+        hinted(a, Level::Intermediate, 385, 85);
+        a.set_lang(strings::Lang::ZhCn);
     }),
     ("hint-zh-cn", |a| {
         SCENES.iter().find(|s| s.0 == "hint").unwrap().1(a);
