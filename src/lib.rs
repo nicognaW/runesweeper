@@ -235,7 +235,7 @@ const SCENES: &[(&str, fn(&mut App))] = &[
         a.set_lang(strings::Lang::ZhCn);
     }),
     // A Review of an Intermediate game played by a bot that pauses and guesses where it
-    // needn't: a needless guess's reason beside the field, the timeline under it.
+    // needn't: a missed deduction's reason beside the field, the timeline under it.
     ("review", |a| {
         // The first seed whose game runs long enough to have a few markers.
         for seed in 1.. {
@@ -246,7 +246,10 @@ const SCENES: &[(&str, fn(&mut App))] = &[
             }
         }
         a.open_review(0);
-        a.review_select(0);
+        // A missed deduction midway shows more of the field than the opening guess.
+        let markers = &a.review.as_ref().unwrap().markers;
+        let k = markers.iter().position(|m| matches!(m.kind, review::Kind::Missed { .. })).unwrap_or(0);
+        a.review_select(k);
     }),
     // A loss through the App, so History has it: the banner offers a Review.
     ("lost-review", |a| {
