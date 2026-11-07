@@ -131,25 +131,33 @@ fn reviewed_game(a: &mut App) {
 }
 
 /// Follows hints from the opening click at the centre, opening the `lucky` cells in turn at
-/// each forced guess, then shows the next forced guess's hint in full.
-fn to_guess(a: &mut App, level: Level, seed: u32, lucky: &[usize]) {
+/// each forced guess; once they are used, applies `then` more hints (all of them up to the
+/// next forced guess, with None) and shows the next hint in full.
+fn hinted(a: &mut App, level: Level, seed: u32, lucky: &[usize], then: Option<usize>) {
     *a = scene(level, seed);
     a.open_at(a.game.idx(a.game.w / 2, a.game.h / 2));
-    let mut lucky = lucky.iter();
-    for _ in 0..800 {
+    let mut lucky = lucky.iter().peekable();
+    let mut applied = 0;
+    for _ in 0..1000 {
+        if lucky.peek().is_none() && then == Some(applied) {
+            break;
+        }
         a.press_hint();
         let Some(s) = &a.hint else { break };
         if matches!(s.hint.technique, hint::Technique::Guess(_)) {
             let Some(&c) = lucky.next() else { break };
             a.hint = None;
             a.open_at(c);
+            applied = 0;
             continue;
         }
         for _ in 0..4 {
             a.press_hint();
         }
         a.apply_hint();
+        applied += 1;
     }
+    a.hint = None;
     for _ in 0..4 {
         a.press_hint();
     }
@@ -262,10 +270,18 @@ const SCENES: &[(&str, fn(&mut App))] = &[
     // opening a safe cell at each earlier guess): no cell can be proven, and the hint says how
     // a strong player chooses. Fewer mines weighs the mines left against the 161 hidden cells
     // off the numbers; a dead cell, if safe, could only show a 5 and settle nothing.
-    ("guess-fewer", |a| to_guess(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124])),
-    ("guess-dead", |a| to_guess(a, Level::Expert, 2, &[479, 29, 450, 390, 360, 28, 27, 26, 449])),
+    // Deductions no set of up to 4 numbers proves (the hint tries every one first), from games
+    // played the same way: a supposition carried through 8 numbers, each line a consequence.
+    ("deduce-island", |a| hinted(a, Level::Intermediate, 1260, &[120, 104, 135, 134, 152, 150, 166, 118], Some(6))),
+    ("deduce-chain", |a| hinted(a, Level::Expert, 213, &[0, 1, 8, 70, 92], Some(7))),
+    ("deduce-island-zh-cn", |a| {
+        hinted(a, Level::Intermediate, 1260, &[120, 104, 135, 134, 152, 150, 166, 118], Some(6));
+        a.set_lang(strings::Lang::ZhCn);
+    }),
+    ("guess-fewer", |a| hinted(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124], None)),
+    ("guess-dead", |a| hinted(a, Level::Expert, 2, &[479, 29, 450, 390, 360, 28, 27, 26, 449], None)),
     ("guess-fewer-zh-cn", |a| {
-        to_guess(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124]);
+        hinted(a, Level::Expert, 32, &[479, 464, 0, 1, 2, 33, 3, 124], None);
         a.set_lang(strings::Lang::ZhCn);
     }),
     ("hint-zh-cn", |a| {
